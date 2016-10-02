@@ -1,7 +1,5 @@
-{-# LANGUAGE BangPatterns #-}
-module PVPFile.IO ( readPVPHeader
-                  , sparseActivityPVPFileSource
-                  ) where
+module PetaVisionHaskell.PVPFile.IO
+       (readPVPHeader, sparseActivityPVPFileSource) where
 
 import           Control.Concurrent.ParallelIO
 import qualified Control.Monad                 as M
