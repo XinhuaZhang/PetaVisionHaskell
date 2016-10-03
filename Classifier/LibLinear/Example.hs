@@ -4,7 +4,6 @@ import           Control.Monad
 import           Control.Monad.IO.Class                        (liftIO)
 import           Data.Conduit
 import           Data.Conduit.List                             as CL
-import           Data.Image
 import           Foreign.C
 import           Foreign.Marshal.Array
 import           Foreign.Ptr

@@ -1,16 +1,10 @@
 module PetaVision.PVPFile.IO
        (readPVPHeader, sparseActivityPVPFileSource) where
 
-import           Control.Concurrent.ParallelIO
-import qualified Control.Monad                 as M
 import           Control.Monad.IO.Class
 import           Data.Binary.Get
-import           Data.Binary.IEEE754
 import qualified Data.ByteString.Lazy          as L
 import           Data.Conduit
-import qualified Data.Conduit.List             as CL
-import           Data.Foldable
-import qualified Data.Vector.Unboxed           as VU
 import           GHC.Float
 import           System.IO
 
