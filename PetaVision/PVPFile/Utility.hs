@@ -1,4 +1,4 @@
-module PetaVisionHaskell.PVPFile.Utility where
+module PetaVision.PVPFile.Utility where
 
 import qualified Data.Array.Accelerate as A
 import           Data.Array.Unboxed    as AU

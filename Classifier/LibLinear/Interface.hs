@@ -48,13 +48,13 @@ train (TrainParams solver c numExample maxIndex modelName) label feature =
 predict
   :: String -> FilePath -> Sink (Double,Ptr C'feature_node) IO ()
 predict predictModel output =
-  do !modelName <- liftIO $ newCString predictModel
-     !model <- liftIO $ c'load_model modelName
-     (!correct,!total) <-
+  do modelName <- liftIO $ newCString predictModel
+     model <- liftIO $ c'load_model modelName
+     (correct,total) <-
        CL.foldM (func model)
                 (0,0)
-     let !percent = (fromIntegral correct) / (fromIntegral total) * 100
-         !str = show percent
+     let percent = (fromIntegral correct) / (fromIntegral total) * 100
+         str = show percent
      liftIO $ putStrLn str
      h <- liftIO $ openFile output WriteMode
      liftIO $ hPutStrLn h str
@@ -63,7 +63,7 @@ predict predictModel output =
              -> (Int,Int)
              -> (Double,Ptr C'feature_node)
              -> IO (Int,Int)
-        func !model (!correct,!total) (!target,!featurePtr) =
+        func model (correct,total) (target,featurePtr) =
           do prediction <- c'predict model featurePtr
              if round target == round prediction
                 then return (correct + 1,total + 1)

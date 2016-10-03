@@ -1,4 +1,4 @@
-module PetaVisionHaskell.PVPFile.IO
+module PetaVision.PVPFile.IO
        (readPVPHeader, sparseActivityPVPFileSource) where
 
 import           Control.Concurrent.ParallelIO
@@ -59,8 +59,8 @@ getHeaderParam =
               ,nBands]) ++
         [(round time)])
 
-readPVPHeader :: Handle -> IO PVPHeader
-readPVPHeader h =
+getPVPHeader :: Handle -> IO PVPHeader
+getPVPHeader h =
   do bs <- L.hGet h 80
      let params = runGet getHeaderParam bs
      if (params !! 1 == 20)
@@ -69,6 +69,13 @@ readPVPHeader h =
                 then do bs <- L.hGet h (4 * ((params !! 1) - 20))
                         return $ params
                 else return []
+                
+readPVPHeader :: FilePath -> IO PVPHeader
+readPVPHeader filePath =
+  do h <- openBinaryFile filePath ReadMode
+     header <- getPVPHeader h
+     hClose h
+     return header
 
 getPVPValueHeader :: Get (Double,Int)
 getPVPValueHeader =
@@ -104,7 +111,7 @@ sparseActivityPVPFileSourceType2
   :: FilePath -> IO (PVPHeader,Source IO [Int])
 sparseActivityPVPFileSourceType2 filePath =
   do h <- openBinaryFile filePath ReadMode
-     header <- readPVPHeader h
+     header <- getPVPHeader h
      let nbands = header !! 17
          fileType = header !! 2
      if fileType == 2
@@ -148,7 +155,7 @@ sparseActivityPVPFileSource
   :: FilePath -> IO (PVPHeader,Source IO [(Int,Double)])
 sparseActivityPVPFileSource filePath =
   do h <- openBinaryFile filePath ReadMode
-     header <- readPVPHeader h
+     header <- getPVPHeader h
      let nbands = header !! 17
          fileType = header !! 2
      if fileType == 6

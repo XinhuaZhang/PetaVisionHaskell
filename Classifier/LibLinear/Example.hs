@@ -21,7 +21,7 @@ readLabelFile filePath =
 
 labelSource :: FilePath -> Source IO Double
 labelSource filePath =
-  do !labels <- liftIO . readLabelFile $ filePath
+  do labels <- liftIO . readLabelFile $ filePath
      sourceList labels
 
 newParameter :: Solver -> Double -> C'parameter
@@ -37,7 +37,7 @@ newParameter solver c = C'parameter
   }
 
 getFeatureVecPtr :: LibLinearFeature -> IO (Ptr C'feature_node)
-getFeatureVecPtr (Dense !xs) =
+getFeatureVecPtr (Dense xs) =
   newArray (pairs ++
             [C'feature_node (-1)
                             0])
@@ -48,7 +48,7 @@ getFeatureVecPtr (Dense !xs) =
                     [1 ..]
                     xs
         max = P.maximum xs
-getFeatureVecPtr (Sparse !xs) =
+getFeatureVecPtr (Sparse xs) =
   newArray (pairs ++
             [C'feature_node (-1)
                             0])

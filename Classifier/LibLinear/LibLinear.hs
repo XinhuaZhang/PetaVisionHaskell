@@ -43,7 +43,7 @@ import           Foreign.C.Types
 import           GHC.Float
 import           System.IO
 import           System.Mem
-import Utility.Parallel
+
 
 
 {-Syntax-}
