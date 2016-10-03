@@ -1,0 +1,11 @@
+*.dyn_hi
+*.hi
+*.dyn_o
+TAGS
+*~
+*.o
+*.txt
+/Application/PVP2LibLinear/model
+/Application/PVP2LibLinear/run
+/Application/PVP2LibLinear/test
+/Application/PVP2LibLinear/train
