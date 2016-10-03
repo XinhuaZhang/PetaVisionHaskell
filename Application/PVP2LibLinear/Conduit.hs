@@ -30,14 +30,14 @@ trainSink params filePath =
      featurePtr <- liftIO $ P.mapM getFeaturePtr feature
      liftIO $ train params label featurePtr
 
-
+-- liblinear feature node's index starts from 1 !!!!!
 concatConduit
   :: [Int] -> Conduit [[(Int,Double)]] IO [(Int,Double)]
 concatConduit offset =
   awaitForever
     (yield . P.concat .
-     P.zipWith (\i x -> P.map (\(ind,val) -> (ind + i,val)) x) offset)
-     
+     P.zipWith (\i x -> P.map (\(ind,val) -> (ind + i + 1,val)) x) offset)
+
 predictConduit
   :: Conduit [(Int,Double)] IO (Ptr C'feature_node)
 predictConduit =
