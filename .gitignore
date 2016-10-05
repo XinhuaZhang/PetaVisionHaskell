@@ -9,3 +9,4 @@ TAGS
 /Application/PVP2LibLinear/run
 /Application/PVP2LibLinear/test
 /Application/PVP2LibLinear/train
+*.pvp
