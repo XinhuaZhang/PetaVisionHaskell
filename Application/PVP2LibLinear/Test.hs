@@ -17,9 +17,9 @@ main =
         then error "run with --help to see options."
         else return ()
      params <- parseArgs args
-     (header,source) <-
-       M.liftM unzip $ M.mapM sparseActivityPVPFileSource (pvpFile params)
-     let nbands = (P.head header) !! 17
+     header <- M.mapM readPVPHeader (pvpFile params)
+     let source = P.map pvpFileSource (pvpFile params)
+         nbands = (P.head header) !! 17
          dims = dimOffset header
          trainParams =
            TrainParams {trainSolver = L2R_L2LOSS_SVC_DUAL

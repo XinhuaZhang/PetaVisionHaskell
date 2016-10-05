@@ -5,6 +5,7 @@ module PetaVision.PVPFile.IO
   where
 
 import           Control.Monad.IO.Class
+import           Control.DeepSeq
 import           Data.Binary.Get
 import qualified Data.ByteString               as BS
 import qualified Data.ByteString.Lazy          as L
@@ -36,6 +37,14 @@ data PVPOutputData
   | PVP_NONSPIKING_ACT [Double]
   | PVP_ACT_SPARSEVALUES [(Int,Double)]
   deriving (Show)
+  
+instance NFData PVPOutputData where
+  rnf x =
+    case x of
+      PVP_ACT xs -> rnf xs
+      PVP_NONSPIKING_ACT xs -> rnf xs
+      PVP_ACT_SPARSEVALUES xs -> rnf xs
+
 
 data PVPFrameData
   = ACT !Int
@@ -159,20 +168,26 @@ incrementalGetPVPFrameData fileType input0 = go decoder input0
   where decoder = runGetIncremental (getPVPFrameData fileType)
         go
           :: Decoder PVPFrameData -> L.ByteString -> PVPOutputData
-        go (Done leftover' _consumed (ACT x)) input =
-          PVP_ACT (x :
-                   ((\(PVP_ACT xs) -> xs) $!
-                    go decoder (L.chunk leftover' input)))
-        go (Done leftover' _consumed (NONSPIKING_ACT x)) input =
-          PVP_NONSPIKING_ACT
-            (x :
-             ((\(PVP_NONSPIKING_ACT xs) -> xs) $!
-              go decoder (L.chunk leftover' input)))
-        go (Done leftover' _consumed (ACT_SPARSEVALUES x)) input =
-          PVP_ACT_SPARSEVALUES
-            (x :
-             ((\(PVP_ACT_SPARSEVALUES xs) -> xs) $!
-              go decoder (L.chunk leftover' input)))
+        go (Done leftover' _consumed (ACT x)) input
+          | BS.null leftover' && L.null input = PVP_ACT [x]
+          | otherwise =
+            PVP_ACT (x :
+                     ((\(PVP_ACT xs) -> xs) $!
+                      go decoder (L.chunk leftover' input)))
+        go (Done leftover' _consumed (NONSPIKING_ACT x)) input
+          | BS.null leftover' && L.null input = PVP_NONSPIKING_ACT [x]
+          | otherwise =
+            PVP_NONSPIKING_ACT
+              (x :
+               ((\(PVP_NONSPIKING_ACT xs) -> xs) $!
+                go decoder (L.chunk leftover' input)))
+        go (Done leftover' _consumed (ACT_SPARSEVALUES x)) input
+          | BS.null leftover' && L.null input = PVP_ACT_SPARSEVALUES [x]
+          | otherwise =
+            PVP_ACT_SPARSEVALUES
+              (x :
+               ((\(PVP_ACT_SPARSEVALUES xs) -> xs) $!
+                go decoder (L.chunk leftover' input)))
         go (Partial k) input =
           go (k . takeHeadChunk $ input)
              (dropHeadChunk input)
