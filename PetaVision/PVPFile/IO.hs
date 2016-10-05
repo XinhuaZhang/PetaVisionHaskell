@@ -1,11 +1,12 @@
 module PetaVision.PVPFile.IO
-  (PVPOutputData(..)
+  (PVPHeader(..)
+  ,PVPOutputData(..)
   ,readPVPHeader
   ,pvpFileSource)
   where
 
-import           Control.Monad.IO.Class
 import           Control.DeepSeq
+import           Control.Monad.IO.Class
 import           Data.Binary.Get
 import qualified Data.ByteString               as BS
 import qualified Data.ByteString.Lazy          as L
@@ -14,7 +15,26 @@ import           Data.Conduit
 import           GHC.Float
 import           System.IO
 
-type PVPHeader = [Int]
+data PVPHeader =
+  PVPHeader {headerSize :: Int
+            ,numParams  :: Int
+            ,fileType   :: Int
+            ,nx         :: Int
+            ,ny         :: Int
+            ,nf         :: Int
+            ,numRecords :: Int
+            ,recordSize :: Int
+            ,dataSize   :: Int
+            ,dataType   :: Int
+            ,nxProcs    :: Int
+            ,nyProcs    :: Int
+            ,nxGlobal   :: Int
+            ,nyGlobal   :: Int
+            ,kx         :: Int
+            ,ky         :: Int
+            ,nb         :: Int
+            ,nBands     :: Int
+            ,time       :: Double}
 
 data PVPFileType
   = PVP_FILE
@@ -37,12 +57,12 @@ data PVPOutputData
   | PVP_NONSPIKING_ACT [Double]
   | PVP_ACT_SPARSEVALUES [(Int,Double)]
   deriving (Show)
-  
+
 instance NFData PVPOutputData where
   rnf x =
     case x of
-      PVP_ACT xs -> rnf xs
-      PVP_NONSPIKING_ACT xs -> rnf xs
+      PVP_ACT xs              -> rnf xs
+      PVP_NONSPIKING_ACT xs   -> rnf xs
       PVP_ACT_SPARSEVALUES xs -> rnf xs
 
 
@@ -54,7 +74,7 @@ data PVPFrameData
 
 getPVPFileType :: PVPHeader -> PVPFileType
 getPVPFileType header =
-  case fileType of
+  case (fileType header) of
     1 -> PVP_FILE
     2 -> PVP_ACT_FILE
     3 -> PVP_WGT_FILE
@@ -62,17 +82,17 @@ getPVPFileType header =
     5 -> PVP_KERNEL_FILE
     6 -> PVP_ACT_SPARSEVALUES_FILE
     _ -> error "Wrong PVPFileType."
-  where fileType = header !! 2
+
 
 getPVPDataType :: PVPHeader -> PVPDataType
 getPVPDataType header =
-  case dataType of
+  case (dataType header) of
     1 -> PV_BYTE
     2 -> PV_INT
     3 -> PV_FLOAT
     4 -> PV_SPARSEVALUES
     _ -> error "Wrong PVPDataType."
-  where dataType = header !! 9
+
 
 -- Header functions
 getHeaderParam :: Get PVPHeader
@@ -96,38 +116,37 @@ getHeaderParam =
      nb <- getWord32le
      nBands <- getWord32le
      time <- getDoublele
-     return $
-       ((fmap fromIntegral
-              [headerSize
-              ,numParams
-              ,fileType
-              ,nx
-              ,ny
-              ,nf
-              ,numRecords
-              ,recordSize
-              ,dataSize
-              ,dataType
-              ,nxProcs
-              ,nyProcs
-              ,nxGlobal
-              ,nyGlobal
-              ,kx
-              ,ky
-              ,nb
-              ,nBands]) ++
-        [(round time)])
+     return $ PVPHeader (fromIntegral headerSize) 
+                        (fromIntegral numParams)
+                        (fromIntegral fileType)
+                        (fromIntegral nx)
+                        (fromIntegral ny)
+                        (fromIntegral nf)
+                        (fromIntegral numRecords )
+                        (fromIntegral recordSize)
+                        (fromIntegral dataSize)
+                        (fromIntegral dataType)
+                        (fromIntegral nxProcs)
+                        (fromIntegral nyProcs)
+                        (fromIntegral nxGlobal)
+                        (fromIntegral nyGlobal)
+                        (fromIntegral kx)
+                        (fromIntegral ky)
+                        (fromIntegral nb)
+                        (fromIntegral nBands)
+                        (time)
+
 
 getPVPHeader :: Handle -> IO PVPHeader
 getPVPHeader h =
   do bs <- L.hGet h 80
      let params = runGet getHeaderParam bs
-     if (params !! 1 == 20)
+     if ((numParams params) == 20)
         then return $ params
-        else if ((params !! 1) > 20)
-                then do bs <- L.hGet h (4 * ((params !! 1) - 20))
+        else if ((numParams params) > 20)
+                then do bs <- L.hGet h (4 * ((numParams params) - 20))
                         return $ params
-                else return []
+                else error "there are not 20 pvp header parameters."
 
 readPVPHeader :: FilePath -> IO PVPHeader
 readPVPHeader filePath =
@@ -239,17 +258,15 @@ pvpFileSource
 pvpFileSource filePath =
   do h <- liftIO $ openBinaryFile filePath ReadMode
      header <- liftIO $ getPVPHeader h
-     let nbands = header !! 17
-         fileType = getPVPFileType header
-         dataType = getPVPDataType header
-         recordSize = (header !! 7)
+     let fileType' = getPVPFileType header
+         dataType' = getPVPDataType header
          loop n handle =
            do if n > 0
-                 then do frame <- liftIO $ getFrame handle fileType dataType recordSize
+                 then do frame <- liftIO $ getFrame handle fileType' dataType' (recordSize header)
                          yield frame
                          loop (n - 1) handle
                  else do liftIO $ hClose handle
                          return ()
-     loop nbands h
+     loop (nBands header) h
 
 

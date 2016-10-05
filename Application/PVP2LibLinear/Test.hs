@@ -19,7 +19,7 @@ main =
      params <- parseArgs args
      header <- M.mapM readPVPHeader (pvpFile params)
      let source = P.map pvpFileSource (pvpFile params)
-         nbands = (P.head header) !! 17
+         nbands = (nBands $ P.head header) 
          dims = dimOffset header
          trainParams =
            TrainParams {trainSolver = L2R_L2LOSS_SVC_DUAL
