@@ -3,8 +3,10 @@ module Application.PVPAnalysis.Analysis where
 import           Control.Monad.IO.Class (liftIO)
 import           Data.Conduit
 import           Data.Conduit.List      as CL
+import           Data.List              as L
 import           PetaVision.PVPFile.IO
 import           Prelude                as P
+import           Text.Printf
 
 
 sparsity :: PVPHeader -> Sink PVPOutputData IO ()
@@ -17,7 +19,10 @@ sparsity header =
                       error "Cannot compute PVP_NONSPIKING_ACT file's sparsity"
                     PVP_ACT_SPARSEVALUES x -> b + P.length x)
                0
+     let percent = fromIntegral numActive / fromIntegral totalNumEle
      liftIO $
-       putStrLn $
-       show (fromIntegral numActive / fromIntegral totalNumEle * 100) P.++ "%"
+       printf "%0.1f%%(%d/%d Avg. Activatived)\n"
+              (percent * 100 :: Double)
+              (round $ percent * fromIntegral (nf header) :: Int)
+              (nf header)
   where totalNumEle = (nBands header) * (nx header) * (ny header) * (nf header)
