@@ -31,7 +31,7 @@ main =
                           (\((nf,ny,nx),n) -> n + nf * ny * nx) . P.last $ dims
                        ,trainModel = (modelName params)}
      if poolingFlag params
-        then do ctx <- initializeGPUCtx (Option [0])
+        then do ctx <- initializeGPUCtx (Option $ gpuId params)
                 sequenceSources
                   (P.zipWith (\s h ->
                                 s =$=

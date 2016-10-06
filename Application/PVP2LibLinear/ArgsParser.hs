@@ -68,10 +68,12 @@ options =
           (ReqArg (\x -> BatchSize $ readInt x) "INT")
           "Set the batchSize."
   ,Option ['d']
-          ["gpuID"]
-          (ReqArg (\x -> let idx = L.elemIndices ',' x
-                             xs = map (\i -> [x !! (i-1)]) idx
-                         in GPUId $ map readInt xs) "[INT]")
+          ["gpuId"]
+          (ReqArg (\x -> let go []  = []
+                             go (y:ys) = if y == ','
+                                            then go ys
+                                            else [y]:go ys
+                         in GPUId $ map readInt $ go x) "[INT]")
           "Set GPU ID"]
 
 
