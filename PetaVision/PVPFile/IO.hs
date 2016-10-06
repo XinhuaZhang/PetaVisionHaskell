@@ -233,8 +233,10 @@ getFrame h fileType@PVP_ACT_SPARSEVALUES_FILE dataType _recordSize =
                       num <- getWord32le
                       return $ (time,fromIntegral num))
                   bs
-     bs' <- getByteStringData h numActive dataType
-     return $ incrementalGetPVPFrameData fileType bs'
+     if numActive == 0
+        then return (PVP_ACT_SPARSEVALUES [])
+        else do bs' <- getByteStringData h numActive dataType
+                return $ incrementalGetPVPFrameData fileType bs'
 getFrame h fileType@PVP_ACT_FILE dataType _recordSize =
   do bs <- L.hGet h 12
      let (_time,numActive) =
