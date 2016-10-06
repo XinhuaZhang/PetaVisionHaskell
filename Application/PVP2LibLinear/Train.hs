@@ -5,9 +5,11 @@ import           Application.PVP2LibLinear.Conduit
 import           Application.PVP2LibLinear.Utility
 import           Classifier.LibLinear
 import           Control.Monad                        as M
+import           CUDA.MultiGPU
 import           Data.Conduit
 import           Data.Conduit.List                    as CL
 import           PetaVision.PVPFile.IO
+import           PetaVision.PVPFile.Pooling
 import           Prelude                              as P
 import           System.Environment
 
@@ -28,5 +30,21 @@ main =
                        ,trainFeatureIndexMax =
                           (\((nf,ny,nx),n) -> n + nf * ny * nx) . P.last $ dims
                        ,trainModel = (modelName params)}
-     sequenceSources source $$ concatConduit (snd . unzip $ dims) =$
-       trainSink trainParams (labelFile params)
+     if poolingFlag params
+        then do ctx <- initializeGPUCtx (Option $ gpuId params)
+                putStrLn "Using GPU for Pooling"
+                sequenceSources
+                  (P.zipWith (\s h ->
+                                s =$=
+                                (poolConduit GPUFloat
+                                             ctx
+                                             (poolingType params)
+                                             (batchSize params)
+                                             (ny h,nx h,nf h)))
+                             source
+                             header) $$
+                  concatPooledConduit (snd . unzip $ dims) =$
+                  trainSink trainParams (labelFile params)
+                destoryGPUCtx ctx
+        else sequenceSources source $$ concatConduit (snd . unzip $ dims) =$
+             trainSink trainParams (labelFile params)

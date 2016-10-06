@@ -10,6 +10,8 @@ import           Data.Conduit.List                    as CL
 import           PetaVision.PVPFile.IO
 import           Prelude                              as P
 import           System.Environment
+import PetaVision.PVPFile.Pooling
+import CUDA.MultiGPU
 
 main =
   do args <- getArgs
@@ -28,7 +30,25 @@ main =
                        ,trainFeatureIndexMax =
                           (\((nf,ny,nx),n) -> n + nf * ny * nx) . P.last $ dims
                        ,trainModel = (modelName params)}
-     sequenceSources source $$ concatConduit (snd . unzip $ dims) =$=
-       predictConduit =$=
-       mergeSource (labelSource $ labelFile params) =$=
-       predict (modelName params) "result.txt"
+     if poolingFlag params
+        then do ctx <- initializeGPUCtx (Option [0])
+                sequenceSources
+                  (P.zipWith (\s h ->
+                                s =$=
+                                (poolConduit GPUFloat
+                                             ctx
+                                             (poolingType params)
+                                             (batchSize params)
+                                             (ny h,nx h,nf h)))
+                             source
+                             header) $$
+                  concatPooledConduit (snd . unzip $ dims) =$=
+                  predictConduit =$=
+                  mergeSource (labelSource $ labelFile params) =$=
+                  predict (modelName params) "result.txt"
+                destoryGPUCtx ctx
+        else sequenceSources source $$ concatConduit (snd . unzip $ dims) =$=
+               predictConduit =$=
+               mergeSource (labelSource $ labelFile params) =$=
+               predict (modelName params) "result.txt"
+     
