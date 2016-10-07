@@ -8,11 +8,15 @@ module Application.PVP2LibLinear.Conduit
 import           Classifier.LibLinear.Bindings
 import           Classifier.LibLinear.Example
 import           Classifier.LibLinear.Interface
+import           Control.DeepSeq
+import           Control.Monad                  as M
 import           Control.Monad.IO.Class
+import           Control.Parallel.Strategies
 import           Data.Array.Unboxed             as AU
 import           Data.Conduit
 import           Data.Conduit.List              as CL
 import           Data.Maybe
+import           Data.Maybe                     as Maybe
 import           Foreign.Marshal.Array
 import           Foreign.Ptr
 import           PetaVision.PVPFile.IO
@@ -60,7 +64,9 @@ concatConduit offset =
         parsePVPOutputData (PVP_ACT_SPARSEVALUES xs) = xs
         parsePVPOutputData _ = error "Doesn't support this type of pvpfile."
 
-concatPooledConduit :: [Int] -> Conduit [AU.Array (Int,Int,Int) Double] IO [(Int,Double)]
+concatPooledConduit
+  :: [Int] -> Conduit [AU.Array (Int,Int,Int) Double] IO [(Int,Double)]
+
 concatPooledConduit offset =
   awaitForever
     (yield .
