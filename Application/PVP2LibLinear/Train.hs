@@ -30,7 +30,6 @@ main =
                        ,trainFeatureIndexMax =
                           (\((nf,ny,nx),n) -> n + nf * ny * nx) . P.last $ dims
                        ,trainModel = (modelName params)}
-     print $ gpuId params
      if poolingFlag params
         then do ctx <- initializeGPUCtx (Option $ gpuId params)
                 putStrLn "Using GPU for Pooling"

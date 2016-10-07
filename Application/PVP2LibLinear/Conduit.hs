@@ -12,6 +12,7 @@ import           Control.Monad.IO.Class
 import           Data.Array.Unboxed             as AU
 import           Data.Conduit
 import           Data.Conduit.List              as CL
+import           Data.Maybe
 import           Foreign.Marshal.Array
 import           Foreign.Ptr
 import           PetaVision.PVPFile.IO
@@ -34,9 +35,12 @@ trainSink
   :: TrainParams -> FilePath -> Sink [(Int,Double)] IO ()
 trainSink params filePath =
   do label <- liftIO $ readLabelFile filePath
-     feature <- consume
-     featurePtr <- liftIO $ P.mapM getFeaturePtr feature
-     liftIO $ train params label featurePtr
+     featurePtr <-
+       CL.foldM (\xs x ->
+                   do ptr <- liftIO $ getFeaturePtr x
+                      return (ptr : xs))
+                []
+     liftIO $ train params label $ reverse featurePtr
 
 -- liblinear feature node's index starts from 1 !!!!!
 concatConduit :: [Int] -> Conduit [PVPOutputData] IO [(Int,Double)]
