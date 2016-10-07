@@ -49,6 +49,7 @@ concatConduit offset =
   where parsePVPOutputData
           :: PVPOutputData -> [(Int,Double)]
         parsePVPOutputData (PVP_NONSPIKING_ACT xs) =
+          P.filter (\(i,v) -> v /= 0) $
           P.zipWith (\i v -> (i,v))
                     [1 ..]
                     xs
@@ -61,7 +62,7 @@ concatPooledConduit offset =
     (yield .
      P.concat .
      P.zipWith (\i x -> P.map (\(ind,val) -> (ind + i,val)) x) offset .
-     P.map (P.zip [1 ..] . elems))
+     P.map (P.filter (\(i,v) -> v /= 0) . P.zip [1 ..] . elems))
 
 predictConduit
   :: Conduit [(Int,Double)] IO (Ptr C'feature_node)
