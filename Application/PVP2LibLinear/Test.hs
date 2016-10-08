@@ -32,7 +32,10 @@ main =
                           (\((nf,ny,nx),n) -> n + nf * ny * nx) . P.last $ dims
                        ,trainModel = (modelName params)}
      if poolingFlag params
-        then do ctx <- initializeGPUCtx (Option $ gpuId params)
+        then do if gpuPoolingFlag params
+                   then putStrLn "Using GPU for " ++ show (poolingType params) ++ " Pooling"
+                   else putStrLn "Using CPU for " ++ show (poolingType params) ++ " Pooling"
+                ctx <- initializeGPUCtx (Option $ gpuId params)
                 sequenceSources
                   (P.zipWith3
                      (\s h offset ->

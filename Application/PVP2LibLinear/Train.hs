@@ -33,7 +33,9 @@ main =
                        ,trainModel = (modelName params)}
      if poolingFlag params
         then do ctx <- initializeGPUCtx (Option $ gpuId params)
-                putStrLn "Using GPU for Pooling"
+                if gpuPoolingFlag params
+                   then putStrLn "Using GPU for " ++ show (poolingType params) ++ " Pooling"
+                   else putStrLn "Using CPU for " ++ show (poolingType params) ++ " Pooling"
                 sequenceSources
                   (P.zipWith3
                      (\s h offset ->
