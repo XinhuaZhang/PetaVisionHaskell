@@ -1,6 +1,6 @@
 module Main where
 
-import           Application.PVP2LibLinear.ArgsParser
+import           Application.PVP2LibLinear.ArgsParser as AP
 import           Application.PVP2LibLinear.Conduit
 import           Application.PVP2LibLinear.Utility
 import           Classifier.LibLinear
@@ -10,6 +10,7 @@ import           Data.Conduit
 import           Data.Conduit.List                    as CL
 import           PetaVision.PVPFile.IO
 import           PetaVision.PVPFile.Pooling
+import           PetaVision.Utility.Parallel          as PA
 import           Prelude                              as P
 import           System.Environment
 
@@ -37,12 +38,20 @@ main =
                   (P.zipWith3
                      (\s h offset ->
                         s =$=
-                        (poolConduit GPUFloat
-                                     ctx
-                                     (poolingType params)
-                                     (batchSize params)
-                                     (ny h,nx h,nf h)
-                                     offset))
+                        if gpuPoolingFlag params
+                           then poolAccConduit GPUFloat
+                                               ctx
+                                               (poolingType params)
+                                               (AP.batchSize params)
+                                               (ny h,nx h,nf h)
+                                               offset
+                           else poolConduit
+                                  (ParallelParams (AP.numThread params)
+                                                  (AP.batchSize params))
+                                  (poolingType params)
+                                  (poolingSize params)
+                                  (ny h,nx h,nf h)
+                                  offset)
                      source
                      header
                      (snd . unzip $ dims)) $$
