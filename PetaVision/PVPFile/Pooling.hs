@@ -10,7 +10,7 @@ import           Control.Monad               as M
 import           Control.Monad.IO.Class      (liftIO)
 import           CUDA.DataType
 import           CUDA.MultiGPU
-import           Data.Array                  as Arr
+import           Data.Array.Unboxed                  as Arr
 import           Data.Array.Accelerate       as A
 import           Data.Array.Accelerate.CUDA  as A
 import           Data.Conduit
@@ -267,9 +267,8 @@ sparse2NonSparse (ny,nx,nf) frame =
           accumArray (+)
                      0
                      (0,(nx * ny * nf - 1))
-                     frame
-
-
+                     frame :: Arr.Array Int Double
+                     
 poolConduit
   :: ParallelParams
   -> PoolingType
@@ -277,7 +276,7 @@ poolConduit
   -> (Int,Int,Int)
   -> Int
   -> Conduit PVPOutputData IO (VU.Vector (Int,Double))
-poolConduit parallelParams poolingType poolingSize layout@(ny,nx,nf) offset =
+poolConduit parallelParams poolingType poolingSize layout@(ny,nx,nf) offset = 
   do xs <- CL.take (batchSize parallelParams)
      if P.length xs > 0
         then do let pooledData =
@@ -318,5 +317,6 @@ poolConduit parallelParams poolingType poolingSize layout@(ny,nx,nf) offset =
                                sparse2NonSparse layout $
                                x)
                             xs
+                sourceList pooledData
                 poolConduit parallelParams poolingType poolingSize layout offset
         else return ()

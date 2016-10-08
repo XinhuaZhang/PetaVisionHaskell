@@ -32,33 +32,45 @@ main =
                           (\((nf,ny,nx),n) -> n + nf * ny * nx) . P.last $ dims
                        ,trainModel = (modelName params)}
      if poolingFlag params
-        then do ctx <- initializeGPUCtx (Option $ gpuId params)
-                if gpuPoolingFlag params
-                   then putStrLn "Using GPU for " ++ show (poolingType params) ++ " Pooling"
-                   else putStrLn "Using CPU for " ++ show (poolingType params) ++ " Pooling"
-                sequenceSources
-                  (P.zipWith3
-                     (\s h offset ->
-                        s =$=
-                        if gpuPoolingFlag params
-                           then poolAccConduit GPUFloat
-                                               ctx
-                                               (poolingType params)
-                                               (AP.batchSize params)
-                                               (ny h,nx h,nf h)
-                                               offset
-                           else poolConduit
-                                  (ParallelParams (AP.numThread params)
-                                                  (AP.batchSize params))
-                                  (poolingType params)
-                                  (poolingSize params)
-                                  (ny h,nx h,nf h)
-                                  offset)
-                     source
-                     header
-                     (snd . unzip $ dims)) $$
-                  concatPooledConduit =$
-                  trainSink trainParams (labelFile params)
-                destoryGPUCtx ctx
+        then do if gpuPoolingFlag params
+                   then do putStrLn $
+                             "Using GPU for " ++
+                             show (poolingType params) ++ " Pooling"
+                           ctx <- initializeGPUCtx (Option $ gpuId params)
+                           sequenceSources
+                             (P.zipWith3
+                                (\s h offset ->
+                                   s =$=
+                                   poolAccConduit GPUDouble
+                                                  ctx
+                                                  (poolingType params)
+                                                  (AP.batchSize params)
+                                                  (ny h,nx h,nf h)
+                                                  offset)
+                                source
+                                header
+                                (snd . unzip $ dims)) $$
+                             concatPooledConduit =$
+                             trainSink trainParams (labelFile params)
+                           destoryGPUCtx ctx
+                   else do putStrLn $
+                             "Using CPU for " ++
+                             show (poolingType params) ++ " Pooling"
+                           sequenceSources
+                             (P.zipWith3
+                                (\s h offset ->
+                                   s =$=
+                                   poolConduit
+                                     (ParallelParams (AP.numThread params)
+                                                     (AP.batchSize params))
+                                     (poolingType params)
+                                     (poolingSize params)
+                                     (ny h,nx h,nf h)
+                                     offset)
+                                source
+                                header
+                                (snd . unzip $ dims)) $$
+                             concatPooledConduit =$
+                             trainSink trainParams (labelFile params)
         else sequenceSources source $$ concatConduit (snd . unzip $ dims) =$
              trainSink trainParams (labelFile params)

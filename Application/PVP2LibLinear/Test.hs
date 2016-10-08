@@ -33,35 +33,49 @@ main =
                        ,trainModel = (modelName params)}
      if poolingFlag params
         then do if gpuPoolingFlag params
-                   then putStrLn "Using GPU for " ++ show (poolingType params) ++ " Pooling"
-                   else putStrLn "Using CPU for " ++ show (poolingType params) ++ " Pooling"
-                ctx <- initializeGPUCtx (Option $ gpuId params)
-                sequenceSources
-                  (P.zipWith3
-                     (\s h offset ->
-                        s =$=
-                        if gpuPoolingFlag params
-                           then poolAccConduit GPUFloat
-                                               ctx
-                                               (poolingType params)
-                                               (AP.batchSize params)
-                                               (ny h,nx h,nf h)
-                                               offset
-                           else poolConduit
-                                  (ParallelParams (AP.numThread params)
-                                                  (AP.batchSize params))
-                                  (poolingType params)
-                                  (poolingSize params)
-                                  (ny h,nx h,nf h)
-                                  offset)
-                     source
-                     header
-                     (snd . unzip $ dims)) $$
-                  concatPooledConduit =$=
-                  predictConduit =$=
-                  mergeSource (labelSource $ labelFile params) =$=
-                  predict (modelName params) "result.txt"
-                destoryGPUCtx ctx
+                   then do putStrLn $
+                             "Using GPU for " ++
+                             show (poolingType params) ++ " Pooling"
+                           ctx <- initializeGPUCtx (Option $ gpuId params)
+                           sequenceSources
+                             (P.zipWith3
+                                (\s h offset ->
+                                   s =$=
+                                   poolAccConduit GPUDouble
+                                                  ctx
+                                                  (poolingType params)
+                                                  (AP.batchSize params)
+                                                  (ny h,nx h,nf h)
+                                                  offset)
+                                source
+                                header
+                                (snd . unzip $ dims)) $$
+                             concatPooledConduit =$=
+                             predictConduit =$=
+                             mergeSource (labelSource $ labelFile params) =$=
+                             predict (modelName params) "result.txt"
+                           destoryGPUCtx ctx
+                   else do putStrLn $
+                             "Using CPU for " ++
+                             show (poolingType params) ++ " Pooling"
+                           sequenceSources
+                             (P.zipWith3
+                                (\s h offset ->
+                                   s =$=
+                                   poolConduit
+                                     (ParallelParams (AP.numThread params)
+                                                     (AP.batchSize params))
+                                     (poolingType params)
+                                     (poolingSize params)
+                                     (ny h,nx h,nf h)
+                                     offset)
+                                source
+                                header
+                                (snd . unzip $ dims)) $$
+                             concatPooledConduit =$
+                             predictConduit =$=
+                             mergeSource (labelSource $ labelFile params) =$=
+                             predict (modelName params) "result.txt"
         else sequenceSources source $$ concatConduit (snd . unzip $ dims) =$=
              predictConduit =$=
              mergeSource (labelSource $ labelFile params) =$=
