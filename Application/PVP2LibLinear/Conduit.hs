@@ -12,11 +12,11 @@ import           Control.DeepSeq
 import           Control.Monad                  as M
 import           Control.Monad.IO.Class
 import           Control.Parallel.Strategies
-import           Data.Array.Unboxed             as AU
 import           Data.Conduit
 import           Data.Conduit.List              as CL
 import           Data.Maybe
 import           Data.Maybe                     as Maybe
+import           Data.Vector.Unboxed            as VU
 import           Foreign.Marshal.Array
 import           Foreign.Ptr
 import           PetaVision.PVPFile.IO
@@ -26,7 +26,7 @@ import           Prelude                        as P
 getFeaturePtr
   :: [(Int,Double)] -> IO (Ptr C'feature_node)
 getFeaturePtr xs =
-  newArray (pairs ++
+  newArray (pairs P.++
             [C'feature_node (-1)
                             0])
   where pairs =
@@ -44,7 +44,7 @@ trainSink params filePath =
                    do ptr <- liftIO $ getFeaturePtr x
                       return (ptr : xs))
                 []
-     liftIO $ train params label $ reverse featurePtr
+     liftIO $ train params label $ P.reverse featurePtr
 
 -- liblinear feature node's index starts from 1 !!!!!
 concatConduit :: [Int] -> Conduit [PVPOutputData] IO [(Int,Double)]
@@ -65,14 +65,8 @@ concatConduit offset =
         parsePVPOutputData _ = error "Doesn't support this type of pvpfile."
 
 concatPooledConduit
-  :: [Int] -> Conduit [AU.Array (Int,Int,Int) Double] IO [(Int,Double)]
-
-concatPooledConduit offset =
-  awaitForever
-    (yield .
-     P.concat .
-     P.zipWith (\i x -> P.map (\(ind,val) -> (ind + i,val)) x) offset .
-     P.map (P.filter (\(i,v) -> v /= 0) . P.zip [1 ..] . elems))
+  :: Conduit [VU.Vector (Int,Double)] IO [(Int,Double)]
+concatPooledConduit = awaitForever (yield . VU.toList . VU.concat)
 
 predictConduit
   :: Conduit [(Int,Double)] IO (Ptr C'feature_node)

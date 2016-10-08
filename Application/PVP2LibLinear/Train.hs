@@ -34,16 +34,19 @@ main =
         then do ctx <- initializeGPUCtx (Option $ gpuId params)
                 putStrLn "Using GPU for Pooling"
                 sequenceSources
-                  (P.zipWith (\s h ->
-                                s =$=
-                                (poolConduit GPUFloat
-                                             ctx
-                                             (poolingType params)
-                                             (batchSize params)
-                                             (ny h,nx h,nf h)))
-                             source
-                             header) $$
-                  concatPooledConduit (snd . unzip $ dims) =$
+                  (P.zipWith3
+                     (\s h offset ->
+                        s =$=
+                        (poolConduit GPUFloat
+                                     ctx
+                                     (poolingType params)
+                                     (batchSize params)
+                                     (ny h,nx h,nf h)
+                                     offset))
+                     source
+                     header
+                     (snd . unzip $ dims)) $$
+                  concatPooledConduit =$
                   trainSink trainParams (labelFile params)
                 destoryGPUCtx ctx
         else sequenceSources source $$ concatConduit (snd . unzip $ dims) =$

@@ -33,16 +33,18 @@ main =
      if poolingFlag params
         then do ctx <- initializeGPUCtx (Option $ gpuId params)
                 sequenceSources
-                  (P.zipWith (\s h ->
+                  (P.zipWith3 (\s h offset ->
                                 s =$=
                                 (poolConduit GPUFloat
                                              ctx
                                              (poolingType params)
                                              (batchSize params)
-                                             (ny h,nx h,nf h)))
+                                             (ny h,nx h,nf h)
+                                             offset))
                              source
-                             header) $$
-                  concatPooledConduit (snd . unzip $ dims) =$=
+                             header
+                             (snd . unzip $ dims)) $$
+                  concatPooledConduit =$=
                   predictConduit =$=
                   mergeSource (labelSource $ labelFile params) =$=
                   predict (modelName params) "result.txt"
