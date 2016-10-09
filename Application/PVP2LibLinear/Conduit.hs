@@ -11,6 +11,7 @@ import           Classifier.LibLinear.Interface
 import           Control.DeepSeq
 import           Control.Monad                  as M
 import           Control.Monad.IO.Class
+import qualified Control.Monad.Parallel         as MP
 import           Control.Parallel.Strategies
 import           Data.Conduit
 import           Data.Conduit.List              as CL
@@ -36,15 +37,17 @@ getFeaturePtr xs =
                 xs
 
 trainSink
-  :: TrainParams -> FilePath -> Sink [(Int,Double)] IO ()
-trainSink params filePath =
+  :: TrainParams -> FilePath -> Int -> Sink [(Int,Double)] IO ()
+trainSink params filePath batchSize =
   do label <- liftIO $ readLabelFile filePath
-     featurePtr <-
-       CL.foldM (\xs x ->
-                   do ptr <- liftIO $ getFeaturePtr x
-                      return (ptr : xs))
-                []
-     liftIO $ train params label $ P.reverse featurePtr
+     featurePtr <- go []
+     liftIO $ train params label featurePtr
+  where go ptrs =
+          do xs <- CL.take batchSize
+             if P.length xs > 0
+                then do featurePtr <- liftIO $ MP.mapM getFeaturePtr xs
+                        go $ ptrs P.++ featurePtr
+                else return ptrs
 
 -- liblinear feature node's index starts from 1 !!!!!
 concatConduit :: [Int] -> Conduit [PVPOutputData] IO [(Int,Double)]

@@ -19,19 +19,23 @@ data Flag
   | PoolingType String
   | BatchSize Int
   | GPUId [Int]
+  | PoolingSize Int
+  | GPUPooling
   deriving (Show)
 
 data Params =
-  Params {pvpFile     :: [String]
-         ,labelFile   :: String
-         ,c           :: Double
-         ,numThread   :: Int
-         ,modelName   :: String
-         ,findC       :: Bool
-         ,poolingFlag :: Bool
-         ,poolingType :: PoolingType
-         ,batchSize   :: Int
-         ,gpuId       :: [Int]}
+  Params {pvpFile        :: [String]
+         ,labelFile      :: String
+         ,c              :: Double
+         ,numThread      :: Int
+         ,modelName      :: String
+         ,findC          :: Bool
+         ,poolingFlag    :: Bool
+         ,poolingType    :: PoolingType
+         ,batchSize      :: Int
+         ,gpuId          :: [Int]
+         ,poolingSize    :: Int
+         ,gpuPoolingFlag :: Bool}
 
 options :: [OptDescr Flag]
 options =
@@ -74,7 +78,15 @@ options =
                                             then go ys
                                             else [y]:go ys
                          in GPUId $ map readInt $ go x) "[INT]")
-          "Set GPU ID"]
+          "Set GPU ID"
+  ,Option ['g']
+          ["gpuPooling"]
+          (NoArg GPUPooling)
+          "Whether or not using GPU for pooling."
+  ,Option ['s']
+          ["poolingSize"]
+          (ReqArg (\x -> PoolingSize $ readInt x) "INT")
+          "Set pooling size (Defaule 3)."]
 
 
 readInt :: String -> Int
@@ -110,7 +122,9 @@ parseFlag flags = go flags defaultFlag
                  ,poolingFlag = False
                  ,poolingType = Avg
                  ,batchSize = 1
-                 ,gpuId = [0]}
+                 ,gpuId = [0]
+                 ,gpuPoolingFlag = False
+                 ,poolingSize = 3}
         go [] params = params
         go (x:xs) params =
           case x of
@@ -125,6 +139,8 @@ parseFlag flags = go flags defaultFlag
               go xs (params {poolingType = read str :: PoolingType})
             BatchSize x -> go xs (params {batchSize = x})
             GPUId x -> go xs (params {gpuId = x})
+            GPUPooling -> go xs (params {gpuPoolingFlag = True})
+            PoolingSize n -> go xs (params {poolingSize = n})
 
 parseArgs :: [String] -> IO Params
 parseArgs args =
