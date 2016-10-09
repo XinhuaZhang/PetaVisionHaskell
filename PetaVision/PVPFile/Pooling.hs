@@ -10,7 +10,7 @@ import           Control.Monad               as M
 import           Control.Monad.IO.Class      (liftIO)
 import           CUDA.DataType
 import           CUDA.MultiGPU
-import           Data.Array                  as Arr
+import           Data.Array.Unboxed                  as Arr
 import           Data.Array.Accelerate       as A
 import           Data.Array.Accelerate.CUDA  as A
 import           Data.Conduit
@@ -212,14 +212,6 @@ sumPoolList poolSize zero add sub xs =
            (L.foldl' add zero as)
            (P.zip xs bs)
   where (as,bs) = P.splitAt poolSize xs
-  
-sumPoolVec
-  :: (Unbox a) => Int -> a -> (a -> a -> a) -> (a -> a -> a) -> VU.Vector a -> VU.Vector a
-sumPoolVec poolSize zero add sub xs =
-  VU.scanl' (\c (d,e) -> add (sub c d) e)
-            (VU.foldl' add zero as)
-            (VU.zip xs bs)
-  where (as,bs) = VU.splitAt poolSize xs
 
 maxPoolList :: (Ord a)
             => Int -> ([a] -> a) -> [a] -> [a]
@@ -232,20 +224,15 @@ maxPoolList poolSize maxOp ys@(x:xs)
 listOp :: (a -> a -> a) -> [a] -> [a] -> [a]
 listOp op xs ys = P.zipWith op xs ys
 
-vecOp
-  :: (Unbox a)
-  => (a -> a -> a) -> VU.Vector a -> VU.Vector a -> VU.Vector a
-vecOp op xs ys = VU.zipWith op xs ys
-
-avgPoolMatrix :: (Floating a, Unbox a)
-              => Int -> [VU.Vector a] -> [VU.Vector a]
+avgPoolMatrix :: (Floating a)
+              => Int -> [[a]] -> [[a]]
 avgPoolMatrix poolSize xs =
-  P.map (VU.map (\y -> y / ((P.fromIntegral poolSize) ^ 2)) .
-         sumPoolVec poolSize 0 (+) (-)) $
+  P.map (P.map (\y -> y / ((P.fromIntegral poolSize) ^ 2)) .
+         sumPoolList poolSize 0 (+) (-)) $
   sumPoolList poolSize
-              (VU.replicate (VU.length $ P.head xs) 0)
-              (vecOp (+))
-              (vecOp (-))
+              (P.repeat 0)
+              (listOp (+))
+              (listOp (-))
               xs
 
 maxPoolMatrix :: (Ord a)
@@ -257,9 +244,9 @@ maxPoolMatrix poolSize xs =
               xs
               
 
-pool :: (Floating a,Ord a,Unbox a)
-     => PoolingType -> Int -> [VU.Vector a] -> [VU.Vector a]
---pool Max = maxPoolMatrix
+pool :: (Floating a,Ord a)
+     => PoolingType -> Int -> [[a]] -> [[a]]
+pool Max = maxPoolMatrix
 pool Avg = avgPoolMatrix
 
 splitVector
@@ -271,23 +258,16 @@ splitVector n vec
   where (as,bs) = VU.splitAt n vec
 
 sparse2NonSparse
-  :: (Int,Int,Int) -> [(Int,Double)] -> [[VU.Vector Double]]
+  :: (Int,Int,Int) -> [(Int,Double)] -> [[[Double]]]
 sparse2NonSparse (ny,nx,nf) frame =
-  P.map (splitVector ny) . splitVector (nx * nf) . VU.fromList . elems $ arr
+  P.map (P.map VU.toList . splitVector nx . VU.fromList) .
+  L.transpose . P.map VU.toList . splitVector nf . VU.fromList . elems $
+  arr
   where arr =
           accumArray (+)
                      0
-                     ((0,0,0),(nf - 1,nx - 1,ny - 1)) .
-          P.map (\(i,v) -> (indexMapping i,v)) $
-          frame
-        indexMapping :: Int -> (Int,Int,Int)
-        indexMapping i = (a,b,c)
-          where n1 = nf * nx
-                n2 = nf
-                c = div i n1
-                n3 = (mod i n1)
-                b = div n3 n2
-                a = mod n3 n2
+                     (0,(nx * ny * nf - 1))
+                     frame :: Arr.Array Int Double
                      
 poolConduit
   :: ParallelParams
@@ -296,7 +276,7 @@ poolConduit
   -> (Int,Int,Int)
   -> Int
   -> Conduit PVPOutputData IO (VU.Vector (Int,Double))
-poolConduit parallelParams poolingType poolingSize layout@(ny,nx,nf) offset =
+poolConduit parallelParams poolingType poolingSize layout@(ny,nx,nf) offset = 
   do xs <- CL.take (batchSize parallelParams)
      if P.length xs > 0
         then do let pooledData =
@@ -312,9 +292,10 @@ poolConduit parallelParams poolingType poolingSize layout@(ny,nx,nf) offset =
                                   VU.zip (VU.generate (VU.length vec)
                                                       (\i -> i + 1 + offset))
                                          vec) .
-                               VU.concat .
-                               P.map (VU.concat .
-                                      pool poolingType poolingSize .
+                               VU.fromList .
+                               P.concatMap P.concat .
+                               P.map (pool poolingType poolingSize .
+                                      P.map VU.toList .
                                       splitVector nx . VU.fromList) .
                                L.transpose .
                                P.map VU.toList . splitVector nf . VU.fromList $
@@ -326,10 +307,13 @@ poolConduit parallelParams poolingType poolingSize layout@(ny,nx,nf) offset =
                             rdeepseq
                             (\(PVP_ACT_SPARSEVALUES x) ->
                                VU.filter (\(i,v) -> v /= 0) .
-                               (VU.zip (VU.generate (nx * ny * nf)
-                                                    (\i -> i + 1 + offset))) .
-                               VU.concat .
-                               P.map (VU.concat . pool poolingType poolingSize) .
+                               (\vec ->
+                                  VU.zip (VU.generate (VU.length vec)
+                                                      (\i -> i + 1 + offset))
+                                         vec) .
+                               VU.fromList .
+                               P.concatMap P.concat .
+                               P.map (pool poolingType poolingSize) .
                                sparse2NonSparse layout $
                                x)
                             xs
