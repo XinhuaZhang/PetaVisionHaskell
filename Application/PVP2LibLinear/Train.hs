@@ -51,7 +51,9 @@ main =
                                 header
                                 (snd . unzip $ dims)) $$
                              concatPooledConduit =$
-                             trainSink trainParams (labelFile params)
+                             trainSink trainParams
+                                       (labelFile params)
+                                       (AP.batchSize params)
                            destoryGPUCtx ctx
                    else do putStrLn $
                              "Using CPU for " ++
@@ -71,6 +73,10 @@ main =
                                 header
                                 (snd . unzip $ dims)) $$
                              concatPooledConduit =$
-                             trainSink trainParams (labelFile params)
+                             trainSink trainParams
+                                       (labelFile params)
+                                       (AP.batchSize params)
         else sequenceSources source $$ concatConduit (snd . unzip $ dims) =$
-             trainSink trainParams (labelFile params)
+             trainSink trainParams
+                       (labelFile params)
+                       (AP.batchSize params)
