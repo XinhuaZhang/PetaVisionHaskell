@@ -256,18 +256,34 @@ splitVector n vec
  | VU.null vec = []
  | otherwise   = as : splitVector n bs
   where (as,bs) = VU.splitAt n vec
+  
+extractSclice
+  :: Arr.Array (Int,Int,Int) Double -> Int -> [[Double]]
+extractSclice arr featureIndex =
+  P.map (\y ->
+           P.map (\x -> arr Arr.! (featureIndex,x,y))
+                 [0 .. nx])
+        [0 .. ny]
+  where ((_,_,_),(nf,nx,ny)) = bounds arr
 
 sparse2NonSparse
   :: (Int,Int,Int) -> [(Int,Double)] -> [[[Double]]]
 sparse2NonSparse (ny,nx,nf) frame =
-  P.map (P.map VU.toList . splitVector nx . VU.fromList) .
-  L.transpose . P.map VU.toList . splitVector nf . VU.fromList . elems $
-  arr
+  P.map (extractSclice arr)
+        [0 .. nf - 1]
   where arr =
           accumArray (+)
                      0
-                     (0,(nx * ny * nf - 1))
-                     frame :: Arr.Array Int Double
+                     ((0,0,0),(nf - 1,nx - 1,ny - 1)) $
+          P.map (\(i,v) -> (indexMapping i,v)) frame :: Arr.Array (Int,Int,Int) Double
+        indexMapping :: Int -> (Int,Int,Int)
+        indexMapping i = (a,b,c)
+          where n1 = nf * nx
+                n2 = nf
+                c = div i n1
+                n3 = (mod i n1)
+                b = div n3 n2
+                a = mod n3 n2
                      
 poolConduit
   :: ParallelParams
