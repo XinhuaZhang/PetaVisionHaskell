@@ -11,3 +11,4 @@ TAGS
 /Application/PVP2LibLinear/train
 *.pvp
 Application/PVPAnalysis/main
+*.out
