@@ -262,10 +262,10 @@ extractSclice
   :: Arr.Array (Int,Int,Int) Double -> Int -> [[Double]]
 extractSclice arr featureIndex =
   P.map (\y ->
-           P.map (\x -> arr Arr.! (featureIndex,x,y))
+           P.map (\x -> arr Arr.! (x,y,featureIndex))
                  [0 .. nx])
         [0 .. ny]
-  where ((_,_,_),(nf,nx,ny)) = bounds arr
+  where ((_,_,_),(ny,nx,_nf)) = bounds arr
 
 sparse2NonSparse
   :: (Int,Int,Int) -> [(Int,Double)] -> [[[Double]]]
@@ -275,10 +275,10 @@ sparse2NonSparse (ny,nx,nf) frame =
   where arr =
           accumArray (+)
                      0
-                     ((0,0,0),(nf - 1,nx - 1,ny - 1)) $
+                     ((0,0,0),(ny - 1,nx - 1,nf - 1)) $
           P.map (\(i,v) -> (indexMapping i,v)) frame :: Arr.Array (Int,Int,Int) Double
         indexMapping :: Int -> (Int,Int,Int)
-        indexMapping i = (a,b,c)
+        indexMapping i = (c,b,a)
           where n1 = nf * nx
                 n2 = nf
                 c = div i n1
@@ -293,7 +293,7 @@ poolConduit
   -> (Int,Int,Int)
   -> Int
   -> Conduit PVPOutputData IO (VU.Vector (Int,Double))
-poolConduit parallelParams poolingType poolingSize layout@(ny,nx,nf) offset = 
+poolConduit parallelParams poolingType poolingSize layout@(ny,nx,nf) offset =
   do xs <- CL.take (batchSize parallelParams)
      if P.length xs > 0
         then do let pooledData =
@@ -304,19 +304,18 @@ poolConduit parallelParams poolingType poolingSize layout@(ny,nx,nf) offset =
                             parallelParams
                             rdeepseq
                             (\(PVP_NONSPIKING_ACT x) ->
-                               VU.filter (\(i,v) -> v /= 0) .
-                               (\vec ->
-                                  VU.zip (VU.generate (VU.length vec)
-                                                      (\i -> i + 1 + offset))
-                                         vec) .
-                               VU.fromList .
-                               P.concatMap P.concat .
-                               P.map (pool poolingType poolingSize .
-                                      P.map VU.toList .
-                                      splitVector nx . VU.fromList) .
-                               L.transpose .
-                               P.map VU.toList . splitVector nf . VU.fromList $
-                               x)
+                               let arr =
+                                     listArray ((0,0,0),(ny - 1,nx - 1,nf - 1)) x
+                               in VU.filter (\(i,v) -> v /= 0) .
+                                  (\vec ->
+                                     VU.zip (VU.generate (VU.length vec)
+                                                         (\i -> i + 1 + offset))
+                                            vec) .
+                                  VU.fromList .
+                                  P.concatMap P.concat .
+                                  P.map (pool poolingType poolingSize .
+                                         extractSclice arr) $
+                                  [0 .. nf - 1])
                             xs
                         PVP_ACT_SPARSEVALUES _ ->
                           parMapChunk

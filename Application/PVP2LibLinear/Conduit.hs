@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 module Application.PVP2LibLinear.Conduit
   (trainSink
   ,concatConduit
@@ -15,6 +16,7 @@ import qualified Control.Monad.Parallel         as MP
 import           Control.Parallel.Strategies
 import           Data.Conduit
 import           Data.Conduit.List              as CL
+import           Data.List                      as L
 import           Data.Maybe
 import           Data.Maybe                     as Maybe
 import           Data.Vector.Unboxed            as VU
@@ -45,7 +47,9 @@ trainSink params filePath batchSize =
   where go ptrs =
           do xs <- CL.take batchSize
              if P.length xs > 0
-                then do featurePtr <- liftIO $ MP.mapM getFeaturePtr xs
+                then do let !norm = P.map (sqrt . L.foldl' (\a b -> a + b^2) 0 . snd . P.unzip) xs
+                            ys = P.zipWith (\x n -> P.map (\(i,v) -> (i, v / n)) x) xs norm
+                        featurePtr <- liftIO $ MP.mapM getFeaturePtr ys
                         go $ ptrs P.++ featurePtr
                 else return ptrs
 
@@ -76,5 +80,7 @@ predictConduit
 predictConduit =
   awaitForever
     (\x ->
-       do ptr <- liftIO $ getFeaturePtr x
+       do let !norm = sqrt . L.foldl' (\a b -> a + b^2) 0 . snd . P.unzip $ x
+              y = P.map (\(i,v) -> (i, v / norm)) x
+          ptr <- liftIO $ getFeaturePtr y
           yield ptr)
