@@ -141,12 +141,13 @@ getPVPHeader :: Handle -> IO PVPHeader
 getPVPHeader h =
   do bs <- L.hGet h 80
      let params = runGet getHeaderParam bs
-     if ((numParams params) == 20)
-        then return $ params
-        else if ((numParams params) > 20)
-                then do bs <- L.hGet h (4 * ((numParams params) - 20))
-                        return $ params
-                else error "there are not 20 pvp header parameters."
+     return $ params
+     -- if ((numParams params) == 20)
+     --    then return $ params
+     --    else if ((numParams params) > 20)
+     --            then do bs <- L.hGet h (4 * ((numParams params) - 20))
+     --                    return $ params
+     --            else error "there are not 20 pvp header parameters."
 
 readPVPHeader :: FilePath -> IO PVPHeader
 readPVPHeader filePath =
@@ -163,7 +164,7 @@ getByteStringData handle n dataType =
     PV_BYTE         -> L.hGet handle n
     PV_INT          -> L.hGet handle (4 * n)
     PV_FLOAT        -> L.hGet handle (4 * n)
-    PV_SPARSEVALUES -> L.hGet handle (2 * 4 * n)
+    PV_SPARSEVALUES -> L.hGet handle (4 * n)
 
 getPVPFrameData :: PVPFileType -> Get PVPFrameData
 getPVPFrameData fileType =
@@ -235,7 +236,7 @@ getFrame h fileType@PVP_ACT_SPARSEVALUES_FILE dataType _recordSize =
                   bs
      if numActive == 0
         then return (PVP_ACT_SPARSEVALUES [])
-        else do bs' <- getByteStringData h numActive dataType
+        else do bs' <- getByteStringData h (numActive*2) dataType
                 return $ incrementalGetPVPFrameData fileType bs'
 getFrame h fileType@PVP_ACT_FILE dataType _recordSize =
   do bs <- L.hGet h 12

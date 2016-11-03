@@ -10,3 +10,5 @@ TAGS
 /Application/PVP2LibLinear/test
 /Application/PVP2LibLinear/train
 *.pvp
+Application/PVPAnalysis/main
+*.out

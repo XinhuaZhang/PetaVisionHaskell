@@ -30,6 +30,9 @@ initializeGPUCtx (Option devID) =
 destoryGPUCtx :: [A.Context] -> IO ()
 destoryGPUCtx = mapM_ A.destroy
 
+performGCCtx :: [A.Context] -> IO ()
+performGCCtx = mapM_ performGCIn 
+
 multiGPUStream
   :: (Arrays a,Arrays b)
   => [A.Context] -> (Acc a -> Acc b) -> [a] -> [b]
