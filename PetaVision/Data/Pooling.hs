@@ -1,4 +1,4 @@
-module PetaVision.PVPFile.Pooling
+module PetaVision.Data.Pooling
   (module CUDA.DataType
   ,PoolingType(..)
   ,poolAccConduit
@@ -6,13 +6,14 @@ module PetaVision.PVPFile.Pooling
   where
 
 import           Control.DeepSeq
+import           Control.DeepSeq
 import           Control.Monad               as M
 import           Control.Monad.IO.Class      (liftIO)
 import           CUDA.DataType
 import           CUDA.MultiGPU
-import           Data.Array.Unboxed                  as Arr
 import           Data.Array.Accelerate       as A
 import           Data.Array.Accelerate.CUDA  as A
+import           Data.Array.Unboxed          as Arr
 import           Data.Conduit
 import           Data.Conduit.List           as CL
 import           Data.List                   as L
@@ -22,7 +23,6 @@ import           GHC.Float
 import           PetaVision.PVPFile.IO
 import           PetaVision.Utility.Parallel
 import           Prelude                     as P
-import Control.DeepSeq
 
 data PoolingType
   = Max
@@ -113,8 +113,8 @@ poolAccConduit GPUFloat ctx poolingType batchSize layout@(ny,nx,nf) offset =
                            in (i + 1 + A.constant offset) :: A.Exp Int)
                     pooledData =
                       case P.head batch of
-                        PVP_ACT _ -> error "Dosen't support pooling PVP_ACT"
-                        PVP_NONSPIKING_ACT _ ->
+                        PVP_OUTPUT_ACT _ -> error "Dosen't support pooling PVP_OUTPUT_ACT"
+                        PVP_OUTPUT_NONSPIKING_ACT _ ->
                           multiGPUStream
                             ctx
                             (stencil (poolAcc poolingType)
@@ -126,11 +126,11 @@ poolAccConduit GPUFloat ctx poolingType batchSize layout@(ny,nx,nf) offset =
                                                 A.unlift x :: (A.Exp Int
                                                               ,A.Exp Float)
                                           in v A.>* (A.constant 0)))) $
-                          P.map (\(PVP_NONSPIKING_ACT x) ->
+                          P.map (\(PVP_OUTPUT_NONSPIKING_ACT x) ->
                                    A.fromList (Z :. ny :. nx :. nf) $
                                    P.map double2Float x)
                                 batch :: [A.Array DIM1 (Int,Float)]
-                        PVP_ACT_SPARSEVALUES _ ->
+                        PVP_OUTPUT_ACT_SPARSEVALUES _ ->
                           multiGPUStream
                             ctx
                             (sparse2NonsparseAcc layout >->
@@ -143,7 +143,7 @@ poolAccConduit GPUFloat ctx poolingType batchSize layout@(ny,nx,nf) offset =
                                                 A.unlift x :: (A.Exp Int
                                                               ,A.Exp Float)
                                           in v A.>* (A.constant 0)))) $
-                          P.map (\(PVP_ACT_SPARSEVALUES xs) ->
+                          P.map (\(PVP_OUTPUT_ACT_SPARSEVALUES xs) ->
                                    A.fromList (Z :. P.length xs) $
                                    P.map (\(i,x) -> (i,double2Float x)) $ xs)
                                 batch :: [A.Vector (Int,Float)]
@@ -166,8 +166,8 @@ poolAccConduit GPUDouble ctx poolingType batchSize layout@(ny,nx,nf) offset =
                            in (i + 1 + A.constant offset) :: A.Exp Int)
                     pooledData =
                       case P.head batch of
-                        PVP_ACT _ -> error "Dosen't support pooling PVP_ACT"
-                        PVP_NONSPIKING_ACT _ ->
+                        PVP_OUTPUT_ACT _ -> error "Dosen't support pooling PVP_OUTPUT_ACT"
+                        PVP_OUTPUT_NONSPIKING_ACT _ ->
                           multiGPUStream
                             ctx
                             (stencil (poolAcc poolingType)
@@ -179,11 +179,11 @@ poolAccConduit GPUDouble ctx poolingType batchSize layout@(ny,nx,nf) offset =
                                                 A.unlift x :: (A.Exp Int
                                                               ,A.Exp Double)
                                           in v A.>* (A.constant 0)))) $
-                          P.map (\(PVP_NONSPIKING_ACT x) ->
+                          P.map (\(PVP_OUTPUT_NONSPIKING_ACT x) ->
                                    A.fromList (Z :. ny :. nx :. nf)
                                               x)
                                 batch :: [A.Array DIM1 (Int,Double)]
-                        PVP_ACT_SPARSEVALUES _ ->
+                        PVP_OUTPUT_ACT_SPARSEVALUES _ ->
                           multiGPUStream
                             ctx
                             (sparse2NonsparseAcc layout >->
@@ -196,7 +196,7 @@ poolAccConduit GPUDouble ctx poolingType batchSize layout@(ny,nx,nf) offset =
                                                 A.unlift x :: (A.Exp Int
                                                               ,A.Exp Double)
                                           in v A.>* (A.constant 0)))) $
-                          P.map (\(PVP_ACT_SPARSEVALUES xs) ->
+                          P.map (\(PVP_OUTPUT_ACT_SPARSEVALUES xs) ->
                                    A.fromList (Z :. P.length xs)
                                               xs)
                                 batch :: [A.Vector (Int,Double)]
@@ -243,7 +243,7 @@ maxPoolMatrix poolSize xs =
   maxPoolList poolSize
               (P.map P.maximum . L.transpose)
               xs
-              
+
 
 pool :: (Floating a,Ord a)
      => PoolingType -> Int -> [[a]] -> [[a]]
@@ -257,7 +257,7 @@ splitVector n vec
  | VU.null vec = []
  | otherwise   = as : splitVector n bs
   where (as,bs) = VU.splitAt n vec
-  
+
 extractSclice
   :: Arr.Array (Int,Int,Int) Double -> Int -> [[Double]]
 extractSclice arr featureIndex =
@@ -285,7 +285,7 @@ sparse2NonSparse (ny,nx,nf) frame =
                 n3 = (mod i n1)
                 b = div n3 n2
                 a = mod n3 n2
-                     
+
 poolConduit
   :: ParallelParams
   -> PoolingType
@@ -298,12 +298,12 @@ poolConduit parallelParams poolingType poolingSize layout@(ny,nx,nf) offset =
      if P.length xs > 0
         then do let pooledData =
                       case P.head xs of
-                        PVP_ACT _ -> error "Dosen't support pooling PVP_ACT."
-                        PVP_NONSPIKING_ACT _ ->
+                        PVP_OUTPUT_ACT _ -> error "Dosen't support pooling PVP_OUTPUT_ACT."
+                        PVP_OUTPUT_NONSPIKING_ACT _ ->
                           parMapChunk
                             parallelParams
                             rdeepseq
-                            (\(PVP_NONSPIKING_ACT x) ->
+                            (\(PVP_OUTPUT_NONSPIKING_ACT x) ->
                                let arr =
                                      listArray ((0,0,0),(ny - 1,nx - 1,nf - 1)) x
                                in VU.filter (\(i,v) -> v /= 0) .
@@ -317,11 +317,11 @@ poolConduit parallelParams poolingType poolingSize layout@(ny,nx,nf) offset =
                                          extractSclice arr) $
                                   [0 .. nf - 1])
                             xs
-                        PVP_ACT_SPARSEVALUES _ ->
+                        PVP_OUTPUT_ACT_SPARSEVALUES _ ->
                           parMapChunk
                             parallelParams
                             rdeepseq
-                            (\(PVP_ACT_SPARSEVALUES x) ->
+                            (\(PVP_OUTPUT_ACT_SPARSEVALUES x) ->
                                VU.filter (\(i,v) -> v /= 0) .
                                (\vec ->
                                   VU.zip (VU.generate (VU.length vec)

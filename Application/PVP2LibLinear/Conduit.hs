@@ -23,7 +23,7 @@ import           Data.Vector.Unboxed            as VU
 import           Foreign.Marshal.Array
 import           Foreign.Ptr
 import           PetaVision.PVPFile.IO
-import           PetaVision.PVPFile.Pooling
+import           PetaVision.Data.Pooling
 import           Prelude                        as P
 
 getFeaturePtr
@@ -63,12 +63,12 @@ concatConduit offset =
      P.map parsePVPOutputData)
   where parsePVPOutputData
           :: PVPOutputData -> [(Int,Double)]
-        parsePVPOutputData (PVP_NONSPIKING_ACT xs) =
+        parsePVPOutputData (PVP_OUTPUT_NONSPIKING_ACT xs) =
           P.filter (\(i,v) -> v /= 0) $
           P.zipWith (\i v -> (i,v))
                     [1 ..]
                     xs
-        parsePVPOutputData (PVP_ACT_SPARSEVALUES xs) = xs
+        parsePVPOutputData (PVP_OUTPUT_ACT_SPARSEVALUES xs) = xs
         parsePVPOutputData _ = error "Doesn't support this type of pvpfile."
 
 concatPooledConduit

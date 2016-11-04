@@ -9,7 +9,7 @@ import           CUDA.MultiGPU
 import           Data.Conduit
 import           Data.Conduit.List                    as CL
 import           PetaVision.PVPFile.IO
-import           PetaVision.PVPFile.Pooling
+import           PetaVision.Data.Pooling
 import           PetaVision.Utility.Parallel          as PA
 import           Prelude                              as P
 import           System.Environment

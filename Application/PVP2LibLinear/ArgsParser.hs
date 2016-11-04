@@ -3,7 +3,7 @@ module Application.PVP2LibLinear.ArgsParser where
 
 import           Data.List                  as L
 import           Data.Maybe
-import           PetaVision.PVPFile.Pooling
+import           PetaVision.Data.Pooling
 import           System.Console.GetOpt
 import           System.Environment
 import           Text.Read
