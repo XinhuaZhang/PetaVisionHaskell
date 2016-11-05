@@ -8,15 +8,19 @@ module Application.GMM.Representation
   ,dense2Sparse
   ,sparse2Dense
   ,merge
-  ,scalarOp
-  ,vecSum
-  ,vecProduct)
+  ,sumVec
+  ,productVec
+  ,mapVec
+  ,findVec
+  ,lengthVec)
   where
 
+import           Control.DeepSeq
 import           Data.Binary
 import           Data.List           as L
 import           Data.Vector.Unboxed as VU
 import           GHC.Generics
+import Data.Maybe
 
 data DataVec a
   = DenseVec !(Vector a)
@@ -41,6 +45,11 @@ instance (Binary a
          1 ->
            do xs <- get
               return $ SparseVec xs
+              
+instance (NFData a) =>
+         NFData (DataVec a) where
+  rnf (DenseVec vec) = rnf vec
+  rnf (SparseVec xs) = rnf xs
 
 
 fromListDense :: (Unbox a)
@@ -122,21 +131,30 @@ merge f (SparseVec s1) (DenseVec d2) =
         (DenseVec d2)
         (SparseVec s1)
 
-scalarOp
-  :: (Unbox a)
-  => (a -> a -> a) -> a -> DataVec a -> DataVec a
-scalarOp f x (DenseVec vec) = DenseVec $ VU.map (f x) vec
-scalarOp f x (SparseVec ys) = SparseVec $ L.map (\(i,y) -> (i,f x y)) ys
-
-
-vecSum :: (Num a
+sumVec :: (Num a
        ,Unbox a)
     => DataVec a -> a
-vecSum (DenseVec vec) = VU.sum vec
-vecSum (SparseVec xs) = L.foldl1' (+) . L.map snd $ xs
+sumVec (DenseVec vec) = VU.sum vec
+sumVec (SparseVec xs) = L.foldl1' (+) . L.map snd $ xs
 
-vecProduct :: (Num a
+productVec :: (Num a
         ,Unbox a)
      => DataVec a -> a
-vecProduct (DenseVec vec) = VU.product vec
-vecProduct (SparseVec xs) = L.foldl1' (*) . L.map snd $ xs
+productVec (DenseVec vec) = VU.product vec
+productVec (SparseVec xs) = L.foldl1' (*) . L.map snd $ xs
+
+mapVec :: (Unbox a)
+       => (a -> a) -> DataVec a -> DataVec a
+mapVec f (DenseVec vec) = DenseVec $ VU.map f vec
+mapVec f (SparseVec xs) = SparseVec $ L.map (\(i,x) -> (i,f x)) xs
+
+findVec :: (Unbox a) => (a -> Bool) -> DataVec a -> Maybe a
+findVec f (DenseVec vec) = VU.find f vec
+findVec f (SparseVec xs) =
+  case L.find (f . snd) xs of
+    Nothing -> Nothing
+    Just x -> Just $ snd x
+
+lengthVec :: (Unbox a) => DataVec a -> Int
+lengthVec (DenseVec vec) = VU.length vec
+lengthVec (SparseVec xs) = L.length xs
