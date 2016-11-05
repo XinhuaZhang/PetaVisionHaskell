@@ -78,3 +78,10 @@ plotWeight filePath weight =
                        w)
        [0 .. (numPatches' - 1)]
        weightPatches
+
+
+weightedSum :: PVPWeight -> Array U DIM1 Double -> Array U DIM3 Double
+weightedSum weightPatches w 
+  | 
+  where Z :. nyp' :. nxp' :. nfp' :. numPatches' = extent weightPatches
+        Z :. n' = extent w
