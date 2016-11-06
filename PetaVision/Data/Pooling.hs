@@ -31,10 +31,10 @@ data PoolingType
 
 sparse2NonsparseAcc :: (Elt a
                        ,IsFloating a)
-                    => (Int,Int,Int)
+                    => PVPDimension
                     -> Acc (A.Vector (Int,a))
                     -> Acc (A.Array DIM3 a)
-sparse2NonsparseAcc (nf,nx,ny) pairAcc =
+sparse2NonsparseAcc (PVPDimension nx ny nf) pairAcc =
   A.reshape (A.lift (Z :. ny :. nx :. nf)) $ A.scatter ind d val
   where (ind,val) = A.unzip pairAcc
         size = nf * nx * ny
@@ -97,24 +97,30 @@ poolAccConduit
   -> [A.Context]
   -> PoolingType
   -> Int
-  -> (Int,Int,Int)
   -> Int
   -> Conduit PVPOutputData IO (VU.Vector (Int,Double))
-poolAccConduit GPUFloat ctx poolingType batchSize layout@(ny,nx,nf) offset =
+poolAccConduit GPUFloat ctx poolingType batchSize offset =
   do xs <- M.replicateM batchSize await
      let batch = Maybe.catMaybes xs
      if P.length batch > 0
-        then do let indVec =
+        then do let (PVPDimension nx' ny' nf') =
+                      case P.head batch of
+                        PVP_OUTPUT_ACT _ _ ->
+                          error "Dosen't support pooling PVP_OUTPUT_ACT"
+                        PVP_OUTPUT_NONSPIKING_ACT d _ -> d
+                        PVP_OUTPUT_ACT_SPARSEVALUES d _ -> d
+                    indVec =
                       A.generate
-                        (A.index1 $ A.constant (nx * ny * nf))
+                        (A.index1 $ A.constant (nx' * ny' * nf'))
                         (\ix ->
                            let (Z :. i) =
                                  A.unlift ix :: ((A.:.) A.Z (A.Exp Int))
                            in (i + 1 + A.constant offset) :: A.Exp Int)
                     pooledData =
                       case P.head batch of
-                        PVP_OUTPUT_ACT _ -> error "Dosen't support pooling PVP_OUTPUT_ACT"
-                        PVP_OUTPUT_NONSPIKING_ACT _ ->
+                        PVP_OUTPUT_ACT _ _ ->
+                          error "Dosen't support pooling PVP_OUTPUT_ACT"
+                        PVP_OUTPUT_NONSPIKING_ACT _ _ ->
                           multiGPUStream
                             ctx
                             (stencil (poolAcc poolingType)
@@ -126,11 +132,11 @@ poolAccConduit GPUFloat ctx poolingType batchSize layout@(ny,nx,nf) offset =
                                                 A.unlift x :: (A.Exp Int
                                                               ,A.Exp Float)
                                           in v A.>* (A.constant 0)))) $
-                          P.map (\(PVP_OUTPUT_NONSPIKING_ACT x) ->
-                                   A.fromList (Z :. ny :. nx :. nf) $
+                          P.map (\(PVP_OUTPUT_NONSPIKING_ACT _ x) ->
+                                   A.fromList (Z :. ny' :. nx' :. nf') $
                                    P.map double2Float x)
                                 batch :: [A.Array DIM1 (Int,Float)]
-                        PVP_OUTPUT_ACT_SPARSEVALUES _ ->
+                        PVP_OUTPUT_ACT_SPARSEVALUES layout@(PVPDimension nx ny nf) _ ->
                           multiGPUStream
                             ctx
                             (sparse2NonsparseAcc layout >->
@@ -143,7 +149,7 @@ poolAccConduit GPUFloat ctx poolingType batchSize layout@(ny,nx,nf) offset =
                                                 A.unlift x :: (A.Exp Int
                                                               ,A.Exp Float)
                                           in v A.>* (A.constant 0)))) $
-                          P.map (\(PVP_OUTPUT_ACT_SPARSEVALUES xs) ->
+                          P.map (\(PVP_OUTPUT_ACT_SPARSEVALUES _ xs) ->
                                    A.fromList (Z :. P.length xs) $
                                    P.map (\(i,x) -> (i,double2Float x)) $ xs)
                                 batch :: [A.Vector (Int,Float)]
@@ -151,23 +157,30 @@ poolAccConduit GPUFloat ctx poolingType batchSize layout@(ny,nx,nf) offset =
                   P.map (VU.fromList .
                          (P.map (\(j,x) -> (j,float2Double x))) . A.toList)
                         pooledData
-                poolAccConduit GPUFloat ctx poolingType batchSize layout offset
+                poolAccConduit GPUFloat ctx poolingType batchSize offset
         else return ()
-poolAccConduit GPUDouble ctx poolingType batchSize layout@(ny,nx,nf) offset =
+poolAccConduit GPUDouble ctx poolingType batchSize offset =
   do xs <- M.replicateM batchSize await
      let batch = Maybe.catMaybes xs
      if P.length batch > 0
-        then do let indVec =
+        then do let (PVPDimension nx' ny' nf') =
+                      case P.head batch of
+                        PVP_OUTPUT_ACT _ _ ->
+                          error "Dosen't support pooling PVP_OUTPUT_ACT"
+                        PVP_OUTPUT_NONSPIKING_ACT d _ -> d
+                        PVP_OUTPUT_ACT_SPARSEVALUES d _ -> d
+                    indVec =
                       A.generate
-                        (A.index1 $ A.constant (nx * ny * nf))
+                        (A.index1 $ A.constant (nx' * ny' * nf'))
                         (\ix ->
                            let (Z :. i) =
                                  A.unlift ix :: ((A.:.) A.Z (A.Exp Int))
                            in (i + 1 + A.constant offset) :: A.Exp Int)
                     pooledData =
                       case P.head batch of
-                        PVP_OUTPUT_ACT _ -> error "Dosen't support pooling PVP_OUTPUT_ACT"
-                        PVP_OUTPUT_NONSPIKING_ACT _ ->
+                        PVP_OUTPUT_ACT _ _ ->
+                          error "Dosen't support pooling PVP_OUTPUT_ACT"
+                        PVP_OUTPUT_NONSPIKING_ACT _ _ ->
                           multiGPUStream
                             ctx
                             (stencil (poolAcc poolingType)
@@ -179,11 +192,11 @@ poolAccConduit GPUDouble ctx poolingType batchSize layout@(ny,nx,nf) offset =
                                                 A.unlift x :: (A.Exp Int
                                                               ,A.Exp Double)
                                           in v A.>* (A.constant 0)))) $
-                          P.map (\(PVP_OUTPUT_NONSPIKING_ACT x) ->
-                                   A.fromList (Z :. ny :. nx :. nf)
+                          P.map (\(PVP_OUTPUT_NONSPIKING_ACT _ x) ->
+                                   A.fromList (Z :. ny' :. nx' :. nf')
                                               x)
                                 batch :: [A.Array DIM1 (Int,Double)]
-                        PVP_OUTPUT_ACT_SPARSEVALUES _ ->
+                        PVP_OUTPUT_ACT_SPARSEVALUES layout _ ->
                           multiGPUStream
                             ctx
                             (sparse2NonsparseAcc layout >->
@@ -196,12 +209,12 @@ poolAccConduit GPUDouble ctx poolingType batchSize layout@(ny,nx,nf) offset =
                                                 A.unlift x :: (A.Exp Int
                                                               ,A.Exp Double)
                                           in v A.>* (A.constant 0)))) $
-                          P.map (\(PVP_OUTPUT_ACT_SPARSEVALUES xs) ->
+                          P.map (\(PVP_OUTPUT_ACT_SPARSEVALUES _ xs) ->
                                    A.fromList (Z :. P.length xs)
                                               xs)
                                 batch :: [A.Vector (Int,Double)]
                 CL.sourceList $!! (P.map (VU.fromList . A.toList) pooledData)
-                poolAccConduit GPUDouble ctx poolingType batchSize layout offset
+                poolAccConduit GPUDouble ctx poolingType batchSize offset
         else return ()
 
 
@@ -268,8 +281,8 @@ extractSclice arr featureIndex =
   where ((_,_,_),(ny,nx,_nf)) = bounds arr
 
 sparse2NonSparse
-  :: (Int,Int,Int) -> [(Int,Double)] -> [[[Double]]]
-sparse2NonSparse (ny,nx,nf) frame =
+  :: PVPDimension -> [(Int,Double)] -> [[[Double]]]
+sparse2NonSparse (PVPDimension nx ny nf) frame =
   P.map (extractSclice arr)
         [0 .. nf - 1]
   where arr =
@@ -290,22 +303,24 @@ poolConduit
   :: ParallelParams
   -> PoolingType
   -> Int
-  -> (Int,Int,Int)
   -> Int
   -> Conduit PVPOutputData IO (VU.Vector (Int,Double))
-poolConduit parallelParams poolingType poolingSize layout@(ny,nx,nf) offset =
+poolConduit parallelParams poolingType poolingSize offset =
   do xs <- CL.take (batchSize parallelParams)
      if P.length xs > 0
         then do let pooledData =
                       case P.head xs of
-                        PVP_OUTPUT_ACT _ -> error "Dosen't support pooling PVP_OUTPUT_ACT."
-                        PVP_OUTPUT_NONSPIKING_ACT _ ->
+                        PVP_OUTPUT_ACT _ _ ->
+                          error "Dosen't support pooling PVP_OUTPUT_ACT."
+                        PVP_OUTPUT_NONSPIKING_ACT _ _ ->
                           parMapChunk
                             parallelParams
                             rdeepseq
-                            (\(PVP_OUTPUT_NONSPIKING_ACT x) ->
+                            (\(PVP_OUTPUT_NONSPIKING_ACT (PVPDimension nx' ny' nf') x) ->
                                let arr =
-                                     listArray ((0,0,0),(ny - 1,nx - 1,nf - 1)) x
+                                     listArray ((0,0,0)
+                                               ,(ny' - 1,nx' - 1,nf' - 1))
+                                               x
                                in VU.filter (\(i,v) -> v /= 0) .
                                   (\vec ->
                                      VU.zip (VU.generate (VU.length vec)
@@ -315,13 +330,13 @@ poolConduit parallelParams poolingType poolingSize layout@(ny,nx,nf) offset =
                                   P.concatMap P.concat .
                                   P.map (pool poolingType poolingSize .
                                          extractSclice arr) $
-                                  [0 .. nf - 1])
+                                  [0 .. nf' - 1])
                             xs
-                        PVP_OUTPUT_ACT_SPARSEVALUES _ ->
+                        PVP_OUTPUT_ACT_SPARSEVALUES _ _ ->
                           parMapChunk
                             parallelParams
                             rdeepseq
-                            (\(PVP_OUTPUT_ACT_SPARSEVALUES x) ->
+                            (\(PVP_OUTPUT_ACT_SPARSEVALUES layout x) ->
                                VU.filter (\(i,v) -> v /= 0) .
                                (\vec ->
                                   VU.zip (VU.generate (VU.length vec)
@@ -334,5 +349,5 @@ poolConduit parallelParams poolingType poolingSize layout@(ny,nx,nf) offset =
                                x)
                             xs
                 sourceList $!! pooledData
-                poolConduit parallelParams poolingType poolingSize layout offset
+                poolConduit parallelParams poolingType poolingSize offset
         else return ()

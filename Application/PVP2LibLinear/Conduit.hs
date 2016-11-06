@@ -63,12 +63,12 @@ concatConduit offset =
      P.map parsePVPOutputData)
   where parsePVPOutputData
           :: PVPOutputData -> [(Int,Double)]
-        parsePVPOutputData (PVP_OUTPUT_NONSPIKING_ACT xs) =
+        parsePVPOutputData (PVP_OUTPUT_NONSPIKING_ACT _ xs) =
           P.filter (\(i,v) -> v /= 0) $
           P.zipWith (\i v -> (i,v))
                     [1 ..]
                     xs
-        parsePVPOutputData (PVP_OUTPUT_ACT_SPARSEVALUES xs) = xs
+        parsePVPOutputData (PVP_OUTPUT_ACT_SPARSEVALUES _ xs) = xs
         parsePVPOutputData _ = error "Doesn't support this type of pvpfile."
 
 concatPooledConduit

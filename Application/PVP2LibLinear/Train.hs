@@ -45,7 +45,6 @@ main =
                                                   ctx
                                                   (poolingType params)
                                                   (AP.batchSize params)
-                                                  (ny h,nx h,nf h)
                                                   offset)
                                 source
                                 header
@@ -67,7 +66,6 @@ main =
                                                      (AP.batchSize params))
                                      (poolingType params)
                                      (poolingSize params)
-                                     (ny h,nx h,nf h)
                                      offset)
                                 source
                                 header

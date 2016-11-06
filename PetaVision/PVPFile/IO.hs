@@ -1,6 +1,7 @@
 module PetaVision.PVPFile.IO
   (PVPHeader(..)
   ,PVPOutputData(..)
+  ,PVPDimension(..)
   ,readPVPHeader
   ,pvpFileSource)
   where
@@ -66,19 +67,28 @@ data PVPDataType
   | PV_SPARSEVALUES
   deriving (Show)
 
+data PVPDimension =
+  PVPDimension {outputNx :: !Int
+               ,outputNy :: !Int
+               ,outputNf :: !Int}
+  deriving (Show)
+
+instance NFData PVPDimension where
+  rnf (PVPDimension a b c) = a `seq` b `seq` c `seq` ()
+
 data PVPOutputData
-  = PVP_OUTPUT_ACT [Int]
-  | PVP_OUTPUT_NONSPIKING_ACT [Double]
-  | PVP_OUTPUT_ACT_SPARSEVALUES [(Int,Double)]
-  | PVP_OUTPUT_KERNEL (Array U DIM4 Double)
+  = PVP_OUTPUT_ACT !PVPDimension ![Int]
+  | PVP_OUTPUT_NONSPIKING_ACT !PVPDimension ![Double]
+  | PVP_OUTPUT_ACT_SPARSEVALUES !PVPDimension ![(Int,Double)]
+  | PVP_OUTPUT_KERNEL !(Array U DIM4 Double)
   deriving (Show)
 
 instance NFData PVPOutputData where
   rnf x =
     case x of
-      PVP_OUTPUT_ACT xs              -> rnf xs
-      PVP_OUTPUT_NONSPIKING_ACT xs   -> rnf xs
-      PVP_OUTPUT_ACT_SPARSEVALUES xs -> rnf xs
+      PVP_OUTPUT_ACT d xs              -> d `seq` xs `seq` ()
+      PVP_OUTPUT_NONSPIKING_ACT d xs   -> d `seq` xs `seq` ()
+      PVP_OUTPUT_ACT_SPARSEVALUES d xs -> d `seq` xs `seq` ()
 
 
 
@@ -188,6 +198,12 @@ readPVPHeader filePath =
      header <- getPVPHeader h
      hClose h
      return header
+     
+getPVPDimension :: PVPHeader -> PVPDimension
+getPVPDimension header =
+  PVPDimension (nx header)
+               (ny header)
+               (nf header)
 
 -- Frame functions
 getByteStringData
@@ -238,13 +254,13 @@ takeHeadChunk :: BL.ByteString -> Maybe BS.ByteString
 takeHeadChunk lbs =
   case lbs of
     (BL.Chunk bs _) -> Just bs
-    _              -> Nothing
+    _               -> Nothing
 
 dropHeadChunk :: BL.ByteString -> BL.ByteString
 dropHeadChunk lbs =
   case lbs of
     (BL.Chunk _ lbs') -> lbs'
-    _                -> BL.Empty
+    _                 -> BL.Empty
 
 getFrame
   :: PVPHeader -> Handle -> IO PVPOutputData
@@ -262,7 +278,9 @@ getFrame header h =
            getByteStringData h
                              numActive
                              (getPVPDataType header)
-         return . PVP_OUTPUT_ACT . P.map (\(FRAME_ACT x) -> x) $
+         return .
+           PVP_OUTPUT_ACT (getPVPDimension header) .
+           P.map (\(FRAME_ACT x) -> x) $
            incrementalGetPVPFrameData header bs'
     PVP_WGT_FILE -> undefined
     PVP_NONSPIKING_ACT_FILE ->
@@ -276,14 +294,15 @@ getFrame header h =
                              (recordSize header)
                              (getPVPDataType header)
          return .
-           PVP_OUTPUT_NONSPIKING_ACT . P.map (\(FRAME_NONSPIKING_ACT x) -> x) $
+           PVP_OUTPUT_NONSPIKING_ACT (getPVPDimension header) .
+           P.map (\(FRAME_NONSPIKING_ACT x) -> x) $
            incrementalGetPVPFrameData header bs'
     PVP_KERNEL_FILE ->
       do frameHeader <- getPVPHeader h
          bs' <- BL.hGet h (recordSize header)
          let xs =
                P.concat . L.transpose . P.map (\(FRAME_KERNEL x) -> x) $
-               incrementalGetPVPFrameData header bs' 
+               incrementalGetPVPFrameData header bs'
          return .
            PVP_OUTPUT_KERNEL .
            fromListUnboxed (Z :. nyp' :. nxp' :. nfp' :. numPatches') $
@@ -296,13 +315,14 @@ getFrame header h =
                           return $ (time,fromIntegral num))
                       bs
          if numActive == 0
-            then return (PVP_OUTPUT_ACT_SPARSEVALUES [])
+            then return (PVP_OUTPUT_ACT_SPARSEVALUES (getPVPDimension header)
+                                                     [])
             else do bs' <-
                       getByteStringData h
                                         (numActive * 2)
                                         (getPVPDataType header)
                     return .
-                      PVP_OUTPUT_ACT_SPARSEVALUES .
+                      PVP_OUTPUT_ACT_SPARSEVALUES (getPVPDimension header) .
                       P.map (\(FRAME_ACT_SPARSEVALUES x) -> x) $
                       incrementalGetPVPFrameData header bs'
   where (PVPWeightHeader nxp' nyp' nfp' _ _ numPatches') = weightHeader header

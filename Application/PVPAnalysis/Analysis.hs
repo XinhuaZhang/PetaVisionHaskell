@@ -14,9 +14,11 @@ sparsity header =
   do numActive <-
        CL.fold (\b a ->
                   case a of
-                    PVP_ACT _ -> error "Cannot compute PVP_ACT file's sparsity"
-                    PVP_NONSPIKING_ACT x -> b + (P.length . P.filter (/=0) $ x)
-                    PVP_ACT_SPARSEVALUES x -> b + (P.length x))
+                    PVP_OUTPUT_ACT _ _ ->
+                      error "Cannot compute PVP_OUTPUT_ACT file's sparsity"
+                    PVP_OUTPUT_NONSPIKING_ACT _ x ->
+                      b + (P.length . P.filter (/= 0) $ x)
+                    PVP_OUTPUT_ACT_SPARSEVALUES _ x -> b + (P.length x))
                0
      let percent = fromIntegral numActive / fromIntegral totalNumEle
      liftIO $
