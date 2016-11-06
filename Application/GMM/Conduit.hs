@@ -2,6 +2,7 @@ module Application.GMM.Conduit where
 
 import           Application.GMM.GMM
 import           Application.GMM.Representation
+import           Control.Monad.IO.Class
 import           Data.Array.Repa                as R
 import           Data.Conduit
 import           Data.Conduit.List              as CL
@@ -31,7 +32,7 @@ featureConduit parallelParams =
              [(Z :. j :. i :. All)|j <- [0 .. (ny - 1)],i <- [0 .. (nx - 1)]]
         parsePVPOutputData (PVP_OUTPUT_ACT_SPARSEVALUES (PVPDimension nx ny nf) xs) =
           V.fromList .
-          P.map (fromListSparse . P.map (\((_,j),x) -> (j,x))) .
+          P.map (fromListSparse nf . P.map (\((_,j),x) -> (j,x))) .
           L.groupBy (\((ix,_),_) ((iy,_),_) -> ix == iy) .
           P.map (\(i,x) -> ((div i nf,mod i nf),x)) $
           xs
