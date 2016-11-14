@@ -30,7 +30,7 @@ getGridImage weight =
                  (pixelColImgIdx < 0) ||
                  (pixelRowImgIdx >= nyp') || (pixelColImgIdx >= nxp')
                  then maxValRGB
-                 else let n = i * nc + j
+                 else let n = imgRowIdx * nc + imgColIdx
                           r =
                             fromIntegral . round $
                             weight !
@@ -62,7 +62,7 @@ getGridImage weight =
                  (pixelColImgIdx < 0) ||
                  (pixelRowImgIdx >= nyp') || (pixelColImgIdx >= nxp')
                  then maxValY
-                 else let n = i * nc + j
+                 else let n = imgRowIdx * nc + imgColIdx
                       in if n > (numPatches' - 1)
                             then maxValY
                             else fromIntegral . round $
