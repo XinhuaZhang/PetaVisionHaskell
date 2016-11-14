@@ -1,5 +1,6 @@
 module Main where
 
+import           Application.PlotWeight.Grid
 import           Codec.Picture
 import           Data.Conduit
 import           Data.Conduit.List           as CL
@@ -20,5 +21,11 @@ main =
        Nothing -> error "Read weight error"
        Just x ->
          do let w = (\(PVP_OUTPUT_KERNEL y) -> y) x
+                normalizedW =
+                  normalizeWeight (P.fromIntegral (maxBound :: Pixel8))
+                                  w
             plotWeight (dir P.++ "/Weight/" P.++ folderName)
                        w
+            savePngImage
+              (dir P.++ "/Weight/" P.++ folderName P.++ "/dictionary.png")
+              (getGridImage normalizedW 8)
