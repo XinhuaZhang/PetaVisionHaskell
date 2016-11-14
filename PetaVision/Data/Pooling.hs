@@ -51,7 +51,6 @@ sparse2NonsparseAcc (PVPDimension nx ny nf) pairAcc =
 --           => (Stencil3 a) -> Exp a
 --         f (x1,x2,x3) = x2
 --         g (y1,y2,y3,y4,y5) = (f y1) + (f y2) + (f y3) + (f y4) + (f y5)
-
 avgPoolAcc :: (Elt a
               ,IsFloating a)
            => Stencil5x5x3 a -> Exp a
@@ -72,7 +71,6 @@ avgPoolAcc (a,b,c) = (g b / (A.constant 25))
 --           => (Stencil3 a) -> Exp a
 --         f (x1,x2,x3) = x2
 --         g (y1,y2,y3,y4,y5) = P.maximum [(f y1),(f y2),(f y3),(f y4),(f y5)]
-
 maxPoolAcc :: (Elt a
               ,IsFloating a
               ,IsScalar a)
@@ -83,7 +81,6 @@ maxPoolAcc (a,b,c) = g b
           => (Stencil5 a) -> Exp a
         f (x1,x2,x3,x4,x5) = P.maximum [x1,x2,x3,x4,x5]
         g (y1,y2,y3,y4,y5) = P.maximum [(f y1),(f y2),(f y3),(f y4),(f y5)]
-
 
 poolAcc :: (Elt a
            ,IsFloating a
@@ -133,8 +130,9 @@ poolAccConduit GPUFloat ctx poolingType batchSize offset =
                                                               ,A.Exp Float)
                                           in v A.>* (A.constant 0)))) $
                           P.map (\(PVP_OUTPUT_NONSPIKING_ACT _ x) ->
-                                   A.fromList (Z :. ny' :. nx' :. nf') $
-                                   P.map double2Float x)
+                                   A.fromList (Z :. ny' :. nx' :. nf') .
+                                   VU.toList . VU.map double2Float $
+                                   x)
                                 batch :: [A.Array DIM1 (Int,Float)]
                         PVP_OUTPUT_ACT_SPARSEVALUES layout@(PVPDimension nx ny nf) _ ->
                           multiGPUStream
@@ -150,8 +148,10 @@ poolAccConduit GPUFloat ctx poolingType batchSize offset =
                                                               ,A.Exp Float)
                                           in v A.>* (A.constant 0)))) $
                           P.map (\(PVP_OUTPUT_ACT_SPARSEVALUES _ xs) ->
-                                   A.fromList (Z :. P.length xs) $
-                                   P.map (\(i,x) -> (i,double2Float x)) $ xs)
+                                   A.fromList (Z :. VU.length xs) .
+                                   VU.toList .
+                                   VU.map (\(i,x) -> (i,double2Float x)) $
+                                   xs)
                                 batch :: [A.Vector (Int,Float)]
                 CL.sourceList $!!
                   P.map (VU.fromList .
@@ -193,8 +193,9 @@ poolAccConduit GPUDouble ctx poolingType batchSize offset =
                                                               ,A.Exp Double)
                                           in v A.>* (A.constant 0)))) $
                           P.map (\(PVP_OUTPUT_NONSPIKING_ACT _ x) ->
-                                   A.fromList (Z :. ny' :. nx' :. nf')
-                                              x)
+                                   A.fromList (Z :. ny' :. nx' :. nf') .
+                                   VU.toList $
+                                   x)
                                 batch :: [A.Array DIM1 (Int,Double)]
                         PVP_OUTPUT_ACT_SPARSEVALUES layout _ ->
                           multiGPUStream
@@ -210,13 +211,12 @@ poolAccConduit GPUDouble ctx poolingType batchSize offset =
                                                               ,A.Exp Double)
                                           in v A.>* (A.constant 0)))) $
                           P.map (\(PVP_OUTPUT_ACT_SPARSEVALUES _ xs) ->
-                                   A.fromList (Z :. P.length xs)
-                                              xs)
+                                   A.fromList (Z :. VU.length xs) . VU.toList $
+                                   xs)
                                 batch :: [A.Vector (Int,Double)]
                 CL.sourceList $!! (P.map (VU.fromList . A.toList) pooledData)
                 poolAccConduit GPUDouble ctx poolingType batchSize offset
         else return ()
-
 
 {- CPU Pooling -}
 sumPoolList
@@ -257,8 +257,8 @@ maxPoolMatrix poolSize xs =
               (P.map P.maximum . L.transpose)
               xs
 
-
-pool :: (Floating a,Ord a)
+pool :: (Floating a
+        ,Ord a)
      => PoolingType -> Int -> [[a]] -> [[a]]
 pool Max = maxPoolMatrix
 pool Avg = avgPoolMatrix
@@ -267,8 +267,8 @@ splitVector
   :: (Unbox a)
   => Int -> VU.Vector a -> [VU.Vector a]
 splitVector n vec
- | VU.null vec = []
- | otherwise   = as : splitVector n bs
+  | VU.null vec = []
+  | otherwise = as : splitVector n bs
   where (as,bs) = VU.splitAt n vec
 
 extractSclice
@@ -319,8 +319,9 @@ poolConduit parallelParams poolingType poolingSize offset =
                             (\(PVP_OUTPUT_NONSPIKING_ACT (PVPDimension nx' ny' nf') x) ->
                                let arr =
                                      listArray ((0,0,0)
-                                               ,(ny' - 1,nx' - 1,nf' - 1))
-                                               x
+                                               ,(ny' - 1,nx' - 1,nf' - 1)) .
+                                     VU.toList $
+                                     x
                                in VU.filter (\(i,v) -> v /= 0) .
                                   (\vec ->
                                      VU.zip (VU.generate (VU.length vec)
@@ -345,7 +346,7 @@ poolConduit parallelParams poolingType poolingSize offset =
                                VU.fromList .
                                P.concatMap P.concat .
                                P.map (pool poolingType poolingSize) .
-                               sparse2NonSparse layout $
+                               sparse2NonSparse layout . VU.toList $
                                x)
                             xs
                 sourceList $!! pooledData

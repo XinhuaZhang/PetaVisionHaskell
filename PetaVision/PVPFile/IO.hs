@@ -16,6 +16,7 @@ import qualified Data.ByteString.Lazy          as BL
 import qualified Data.ByteString.Lazy.Internal as BL
 import           Data.Conduit                  as C
 import           Data.List                     as L
+import           Data.Vector.Unboxed           as VU
 import           GHC.Float
 import           Prelude                       as P
 import           System.IO
@@ -78,8 +79,8 @@ instance NFData PVPDimension where
 
 data PVPOutputData
   = PVP_OUTPUT_ACT !PVPDimension ![Int]
-  | PVP_OUTPUT_NONSPIKING_ACT !PVPDimension ![Double]
-  | PVP_OUTPUT_ACT_SPARSEVALUES !PVPDimension ![(Int,Double)]
+  | PVP_OUTPUT_NONSPIKING_ACT !PVPDimension !(VU.Vector Double)
+  | PVP_OUTPUT_ACT_SPARSEVALUES !PVPDimension !(VU.Vector (Int,Double))
   | PVP_OUTPUT_KERNEL !(Array U DIM4 Double)
   deriving (Show)
 
@@ -198,7 +199,7 @@ readPVPHeader filePath =
      header <- getPVPHeader h
      hClose h
      return header
-     
+
 getPVPDimension :: PVPHeader -> PVPDimension
 getPVPDimension header =
   PVPDimension (nx header)
@@ -295,10 +296,10 @@ getFrame header h =
                              (getPVPDataType header)
          return .
            PVP_OUTPUT_NONSPIKING_ACT (getPVPDimension header) .
-           P.map (\(FRAME_NONSPIKING_ACT x) -> x) $
+           VU.fromList . P.map (\(FRAME_NONSPIKING_ACT x) -> x) $
            incrementalGetPVPFrameData header bs'
     PVP_KERNEL_FILE ->
-      do frameHeader <- getPVPHeader h
+      do _frameHeader <- getPVPHeader h
          bs' <- BL.hGet h (recordSize header)
          let xs =
                P.concat . L.transpose . P.map (\(FRAME_KERNEL x) -> x) $
@@ -316,14 +317,14 @@ getFrame header h =
                       bs
          if numActive == 0
             then return (PVP_OUTPUT_ACT_SPARSEVALUES (getPVPDimension header)
-                                                     [])
+                                                     VU.empty)
             else do bs' <-
                       getByteStringData h
                                         (numActive * 2)
                                         (getPVPDataType header)
                     return .
                       PVP_OUTPUT_ACT_SPARSEVALUES (getPVPDimension header) .
-                      P.map (\(FRAME_ACT_SPARSEVALUES x) -> x) $
+                      VU.fromList . P.map (\(FRAME_ACT_SPARSEVALUES x) -> x) $
                       incrementalGetPVPFrameData header bs'
   where (PVPWeightHeader nxp' nyp' nfp' _ _ numPatches') = weightHeader header
 
