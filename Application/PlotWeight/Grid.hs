@@ -24,10 +24,11 @@ getGridImage weight =
                imgColIdx = div j gridImgWidth
                pixelRowIdx = mod i gridImgHeight
                pixelColIdx = mod j gridImgWidth
-           in if (pixelRowIdx - numPixelBorderY < 0) ||
-                 (pixelColIdx - numPixelBorderX < 0) ||
-                 (pixelRowIdx - numPixelBorderY >= nyp') ||
-                 (pixelColIdx - numPixelBorderX >= nxp')
+               pixelRowImgIdx = pixelRowIdx - numPixelBorderY
+               pixelColImgIdx = pixelColIdx - numPixelBorderX
+           in if (pixelRowImgIdx < 0) ||
+                 (pixelColImgIdx < 0) ||
+                 (pixelRowImgIdx >= nyp') || (pixelColImgIdx >= nxp')
                  then maxValRGB
                  else let n = i * nc + j
                           r =
@@ -55,10 +56,11 @@ getGridImage weight =
                imgColIdx = div j gridImgWidth
                pixelRowIdx = mod i gridImgHeight
                pixelColIdx = mod j gridImgWidth
-           in if (pixelRowIdx - numPixelBorderY < 0) ||
-                 (pixelColIdx - numPixelBorderX < 0) ||
-                 (pixelRowIdx - numPixelBorderY >= nyp') ||
-                 (pixelColIdx - numPixelBorderX >= nxp')
+               pixelRowImgIdx = pixelRowIdx - numPixelBorderY
+               pixelColImgIdx = pixelColIdx - numPixelBorderX
+           in if (pixelRowImgIdx < 0) ||
+                 (pixelColImgIdx < 0) ||
+                 (pixelRowImgIdx >= nyp') || (pixelColImgIdx >= nxp')
                  then maxValY
                  else let n = i * nc + j
                       in if n > (numPatches' - 1)
