@@ -61,7 +61,7 @@ main =
                              (P.zipWith3
                                 (\s h offset ->
                                    s =$=
-                                   poolConduit
+                                   poolVecConduit
                                      (ParallelParams (AP.numThread params)
                                                      (AP.batchSize params))
                                      (poolingType params)

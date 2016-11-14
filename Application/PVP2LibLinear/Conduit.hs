@@ -46,7 +46,7 @@ trainSink :: TrainParams
 trainSink params filePath batchSize =
   do label <- liftIO $ readLabelFile filePath
      featurePtr <- go []
-     liftIO $ train params label featurePtr
+     liftIO $ train params label (L.concat . L.reverse $ featurePtr)
   where go ptrs =
           do xs <- CL.take batchSize
              if P.length xs > 0
@@ -59,7 +59,7 @@ trainSink params filePath batchSize =
                               P.zipWith (\x n -> VU.map (\(i,v) -> (i,v / n)) x) xs norm
                         featurePtr <-
                           liftIO $ MP.mapM (getFeaturePtr . VU.toList) ys
-                        go $ ptrs P.++ featurePtr
+                        go $ featurePtr : ptrs
                 else return ptrs
 
 -- liblinear feature node's index starts from 1 !!!!!
