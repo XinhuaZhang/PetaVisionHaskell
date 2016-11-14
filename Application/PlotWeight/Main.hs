@@ -28,4 +28,4 @@ main =
                        w
             savePngImage
               (dir P.++ "/Weight/" P.++ folderName P.++ "/dictionary.png")
-              (getGridImage normalizedW 8)
+              (getGridImage normalizedW)

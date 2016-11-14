@@ -13,8 +13,8 @@ getGridRowsCols weight = (r,c)
         c = round . sqrt . fromIntegral $ n
         r = ceiling $ (fromIntegral n) / (fromIntegral c)
         
-getGridImage :: PVPWeight -> Int -> DynamicImage
-getGridImage weight numPixelBorder =
+getGridImage :: PVPWeight -> DynamicImage
+getGridImage weight =
   case nfp' of
     3 ->
       ImageRGB8 $
@@ -24,10 +24,10 @@ getGridImage weight numPixelBorder =
                imgColIdx = div j gridImgWidth
                pixelRowIdx = mod i gridImgHeight
                pixelColIdx = mod j gridImgWidth
-           in if (pixelRowIdx - numPixelBorder < 0) ||
-                 (pixelColIdx - numPixelBorder < 0) ||
-                 (pixelRowIdx - numPixelBorder >= nyp') ||
-                 (pixelColIdx - numPixelBorder >= nxp')
+           in if (pixelRowIdx - numPixelBorderY < 0) ||
+                 (pixelColIdx - numPixelBorderX < 0) ||
+                 (pixelRowIdx - numPixelBorderY >= nyp') ||
+                 (pixelColIdx - numPixelBorderX >= nxp')
                  then maxValRGB
                  else let n = i * nc + j
                           r =
@@ -55,10 +55,10 @@ getGridImage weight numPixelBorder =
                imgColIdx = div j gridImgWidth
                pixelRowIdx = mod i gridImgHeight
                pixelColIdx = mod j gridImgWidth
-           in if (pixelRowIdx - numPixelBorder < 0) ||
-                 (pixelColIdx - numPixelBorder < 0) ||
-                 (pixelRowIdx - numPixelBorder >= nyp') ||
-                 (pixelColIdx - numPixelBorder >= nxp')
+           in if (pixelRowIdx - numPixelBorderY < 0) ||
+                 (pixelColIdx - numPixelBorderX < 0) ||
+                 (pixelRowIdx - numPixelBorderY >= nyp') ||
+                 (pixelColIdx - numPixelBorderX >= nxp')
                  then maxValY
                  else let n = i * nc + j
                       in if n > (numPatches' - 1)
@@ -74,8 +74,10 @@ getGridImage weight numPixelBorder =
                     (maxBound :: Pixel8)
         maxValY = maxBound :: Pixel8
         (Z :. nyp' :. nxp' :. nfp' :. numPatches') = extent weight
+        numPixelBorderX = round (fromIntegral nxp' / 8)
+        numPixelBorderY = round (fromIntegral nyp' / 8)
         (nr,nc) = getGridRowsCols weight
-        gridImgHeight = nyp' + 2 * numPixelBorder
+        gridImgHeight = nyp' + 2 * numPixelBorderY
         numPixelRows = nr * gridImgHeight
-        gridImgWidth = nxp' + 2 * numPixelBorder
+        gridImgWidth = nxp' + 2 * numPixelBorderX
         numPixelCols = nc * gridImgWidth
