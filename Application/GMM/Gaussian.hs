@@ -2,41 +2,33 @@
 {-# LANGUAGE DeriveGeneric #-}
 module Application.GMM.Gaussian where
 
+import           Application.GMM.Representation
 import           Data.Binary
-import           Data.Vector.Unboxed as VU
 import           GHC.Generics
-import           Prelude             as P
 
 -- sigma is a diagonal matrix
 data Gaussian =
   Gaussian {numDims :: Int
-           ,mu      :: VU.Vector Double
-           ,sigma   :: VU.Vector Double}
+           ,mu      :: DataVec Double
+           ,sigma   :: DataVec Double}
   deriving (Show,Generic)
 
 instance Binary Gaussian where
   put (Gaussian numDims' mu' sigma') =
     do put numDims'
-       put $ toList mu'
-       put $ toList sigma'
+       put mu'
+       put sigma'
   get =
     do numDims' <- get
        mu' <- get
        sigma' <- get
-       return (Gaussian numDims'
-                        (fromList mu')
-                        (fromList sigma'))
+       return (Gaussian numDims' mu' sigma')
 
 {-!x = (2 * pi) ** (0.5 * (fromIntegral numDims'))-}
 gaussian
-  :: Gaussian -> VU.Vector Double -> Double
+  :: Gaussian -> DataVec Double -> Double
 gaussian (Gaussian numDims' mu' sigma') xs = result
-  where !y = VU.foldl1' (*) sigma'
-        !z =
-          (-0.5) *
-          (VU.sum $
-           VU.zipWith3 (\a b c -> ((a - b) / c) ^ 2)
-                       xs
-                       mu'
-                       sigma')
-        !result = (exp z) / y
+  where !y = productVec sigma'
+        !z = (-0.5) * (sumVec $ powVec 2 ((mu' - xs) / sigma'))
+        !a = (2*pi) ** (0.5 * (fromIntegral $ lengthVec mu'))
+        !result = (exp z) / (y)
