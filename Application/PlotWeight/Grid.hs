@@ -24,24 +24,25 @@ getGridImage weight =
                imgColIdx = div j gridImgWidth
                pixelRowIdx = mod i gridImgHeight
                pixelColIdx = mod j gridImgWidth
-           in if (pixelRowIdx - numPixelBorderY < 0) ||
-                 (pixelColIdx - numPixelBorderX < 0) ||
-                 (pixelRowIdx - numPixelBorderY >= nyp') ||
-                 (pixelColIdx - numPixelBorderX >= nxp')
+               pixelRowImgIdx = pixelRowIdx - numPixelBorderY
+               pixelColImgIdx = pixelColIdx - numPixelBorderX
+           in if (pixelRowImgIdx < 0) ||
+                 (pixelColImgIdx < 0) ||
+                 (pixelRowImgIdx >= nyp') || (pixelColImgIdx >= nxp')
                  then maxValRGB
-                 else let n = i * nc + j
+                 else let n = imgRowIdx * nc + imgColIdx
                           r =
                             fromIntegral . round $
                             weight !
-                            (Z :. pixelRowIdx :. pixelColIdx :. 0 :. n)
+                            (Z :. pixelRowImgIdx :. pixelColImgIdx :. 0 :. n)
                           g =
                             fromIntegral . round $
                             weight !
-                            (Z :. pixelRowIdx :. pixelColIdx :. 1 :. n)
+                            (Z :. pixelRowImgIdx :. pixelColImgIdx :. 1 :. n)
                           b =
                             fromIntegral . round $
                             weight !
-                            (Z :. pixelRowIdx :. pixelColIdx :. 2 :. n)
+                            (Z :. pixelRowImgIdx :. pixelColImgIdx :. 2 :. n)
                       in if n > (numPatches' - 1)
                             then maxValRGB
                             else PixelRGB8 r g b)
@@ -55,17 +56,18 @@ getGridImage weight =
                imgColIdx = div j gridImgWidth
                pixelRowIdx = mod i gridImgHeight
                pixelColIdx = mod j gridImgWidth
-           in if (pixelRowIdx - numPixelBorderY < 0) ||
-                 (pixelColIdx - numPixelBorderX < 0) ||
-                 (pixelRowIdx - numPixelBorderY >= nyp') ||
-                 (pixelColIdx - numPixelBorderX >= nxp')
+               pixelRowImgIdx = pixelRowIdx - numPixelBorderY
+               pixelColImgIdx = pixelColIdx - numPixelBorderX
+           in if (pixelRowImgIdx < 0) ||
+                 (pixelColImgIdx < 0) ||
+                 (pixelRowImgIdx >= nyp') || (pixelColImgIdx >= nxp')
                  then maxValY
-                 else let n = i * nc + j
+                 else let n = imgRowIdx * nc + imgColIdx
                       in if n > (numPatches' - 1)
                             then maxValY
                             else fromIntegral . round $
                                  weight !
-                                 (Z :. pixelRowIdx :. pixelColIdx :. 0 :. n))
+                                 (Z :. pixelRowImgIdx :. pixelColImgIdx :. 0 :. n))
         numPixelCols
         numPixelRows
   where maxValRGB =
@@ -74,8 +76,8 @@ getGridImage weight =
                     (maxBound :: Pixel8)
         maxValY = maxBound :: Pixel8
         (Z :. nyp' :. nxp' :. nfp' :. numPatches') = extent weight
-        numPixelBorderX = round (fromIntegral nxp' / 8)
-        numPixelBorderY = round (fromIntegral nyp' / 8)
+        numPixelBorderX = round (fromIntegral nxp' / 4)
+        numPixelBorderY = round (fromIntegral nyp' / 4)
         (nr,nc) = getGridRowsCols weight
         gridImgHeight = nyp' + 2 * numPixelBorderY
         numPixelRows = nr * gridImgHeight
