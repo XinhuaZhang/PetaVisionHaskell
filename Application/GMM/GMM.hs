@@ -52,7 +52,9 @@ assignGMM
 assignGMM parallelParams gmm@(MixtureModel n modelVec) xs
   | V.length smallVarIdx > 0 =
     do putStrLn "Variances of some Gaussians are too small. Overfitting could happen. Reset."
+       print $ P.length smallVarIdx
        print smallVarIdx
+       print $ modelVec V.! (V.head smallVarIdx)
        newModel <- resetGMM gmm smallVarIdx
        assignGMM parallelParams newModel xs
   | isJust zeroZIdx =
@@ -66,7 +68,24 @@ assignGMM parallelParams gmm@(MixtureModel n modelVec) xs
        print zeroKIdx
        newModel <- resetGMM gmm zeroKIdx
        assignGMM parallelParams newModel xs
-  | otherwise = return (zs,nks,likelihood,gmm)
+  | otherwise =
+    do let x = V.head xs
+           (Model (_,(Gaussian _ mu' sigma'))) = V.head modelVec
+           a = mu' - x
+           b = powVec 2 (a / sigma')
+           c = exp (-0.5 * sumVec b)
+           d = productVec sigma'
+           e = (2 * pi) ** (0.5 * (P.fromIntegral $ lengthVec sigma'))
+       -- print mu'
+       -- print sigma'
+       -- print x
+       -- print a
+       -- print b
+       -- print $ sumVec b
+       -- print c
+       -- print d
+       -- print $ c / d / e
+       return (zs,nks,likelihood,gmm)
   where !zs =
           parMapChunkVector
             parallelParams
@@ -89,12 +108,12 @@ assignGMM parallelParams gmm@(MixtureModel n modelVec) xs
         smallVarIdx =
           V.findIndices
             (\(Model (w,Gaussian _ _ sigmaVec)) ->
-               case findVec (< 0.05) sigmaVec of
+               case findVec (< 0.0001) sigmaVec of
                  Nothing -> False
-                 Just _  -> True)
+                 Just _ -> True)
             modelVec
         probability y =
-                  V.map (\(Model (wj,mj)) -> (wj * gaussian mj y)) modelVec
+          V.map (\(Model (wj,mj)) -> (wj * gaussian mj y)) modelVec
 
 resetGMM :: GMM -> V.Vector Int -> IO GMM
 resetGMM gmm@(MixtureModel n modelVec) idx =
@@ -130,9 +149,12 @@ updateMuKGMM :: Model Gaussian
              -> Double
              -> GMMParameters
 updateMuKGMM mg zs xs nk =
-  mapVec (/ nk) .
-  V.foldl1' (merge (+)) .
-  V.zipWith (\z x -> mapVec (* (assignPoint mg z x)) x) zs $
+  scalarMulVec (1 / nk) .
+  addFoldVec .
+  V.zipWith (\z x ->
+               scalarMulVec (assignPoint mg z x)
+                            x)
+            zs $
   xs
 
 updateMuGMM :: ParallelParams
@@ -154,15 +176,16 @@ updateSigmaKGMM :: Model Gaussian
                 -> Double
                 -> GMMParameters
                 -> GMMParameters
-updateSigmaKGMM modelK zs xs nk newMuK = newSigma
-  where newSigma =
-          mapVec (\x -> sqrt (x / nk)) .
-          V.foldl1' (merge (+)) .
-          V.zipWith (\z x ->
-                       mapVec (* (assignPoint modelK z x)) $
-                       merge (\mu y -> (y - mu) ^ 2) newMuK x)
-                    zs $
-          xs
+updateSigmaKGMM modelK zs xs nk newMuK =
+  powVec 0.5 .
+  scalarMulVec (1 / nk) .
+  addFoldVec .
+  V.zipWith (\z x ->
+--               scalarMulVec (assignPoint modelK z x) . powVec 2 $ (newMuK - x))
+               scalarMulVec (assignPoint modelK z x) . powVec 2 $ x)
+            zs $
+  xs
+          
 
 updateSigmaGMM :: ParallelParams
                -> GMM
@@ -214,7 +237,7 @@ em parallelParams filePath xs threshold oldLikelihood oldModel =
                       newW
                       newMu
                       newSigma
-         !avgLikelihood =
+         !avgLikelihood = -- newLikelihood / (P.fromIntegral $ V.length xs)
            log $
            (exp (newLikelihood / (P.fromIntegral $ V.length xs))) /
            ((2 * pi) ** (0.5 * (fromIntegral nD)))
@@ -267,11 +290,11 @@ randomGaussian numDimension gen =
   ,newGen2)
   where (mu,newGen1) =
           randomRList numDimension
-                      (-5,5)
+                      (0,0)
                       gen
         (sigma,newGen2) =
           randomRList numDimension
-                      (1,100)
+                      (1,10)
                       newGen1
 
 gmmSink :: ParallelParams
@@ -280,9 +303,9 @@ gmmSink :: ParallelParams
         -> FilePath
         -> Sink (V.Vector GMMData) IO ()
 gmmSink parallelParams numM threshold filePath =
-  do xs <- consume
+  do xs <- CL.take 100
      fileFlag <- liftIO $ doesFileExist filePath
-     models <-
+     model1 <-
        liftIO $
        if fileFlag
           then do fileSize <- liftIO $ getFileSize filePath
@@ -292,5 +315,12 @@ gmmSink parallelParams numM threshold filePath =
                                         (lengthVec . V.head . P.head $ xs)
           else initializeGMM numM
                              (lengthVec . V.head . P.head $ xs)
+     model2 <-
+       if (lengthVec . V.head . P.head $ xs) /=
+          ((\(Model (_,gm)) -> numDims gm) . V.head . model $ model1)
+          then liftIO $
+               initializeGMM numM
+                             (lengthVec . V.head . P.head $ xs)
+          else return model1
      let !ys = V.concat xs
-     liftIO $ em parallelParams filePath ys threshold 0 models
+     liftIO $ em parallelParams filePath ys threshold 0 model2

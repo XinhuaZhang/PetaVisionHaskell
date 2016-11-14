@@ -7,8 +7,16 @@ import           Prelude         as P
 
 -- the layout of the weigth array is nyp x nxp x nfp x numPatches
 type PVPWeight = Array U DIM4 Double
+type PVPWeightPatch = Array U DIM3 Double
 
 -- normalize image pixel value to range of [0,upperBound]
+normalizeWeightPatch
+  :: Double -> PVPWeightPatch -> PVPWeightPatch
+normalizeWeightPatch upperBound weightPatch =
+  computeS $ R.map (\x -> (x - minV) / (maxV - minV) * upperBound) weightPatch
+  where maxV = foldAllS max 0 weightPatch
+        minV = foldAllS min 10000 weightPatch
+
 normalizeWeight
   :: Double -> PVPWeight -> PVPWeight
 normalizeWeight upperBound weight =
@@ -78,10 +86,50 @@ plotWeight filePath weight =
                        w)
        [0 .. (numPatches' - 1)]
        weightPatches
+       
+plotWeightPatch :: FilePath -> PVPWeightPatch -> IO ()
+plotWeightPatch filePath weightPatch =
+  do let Z :. nyp' :. nxp' :. nfp' = extent weightPatch
+         normalizedWeightPatch =
+           normalizeWeightPatch (P.fromIntegral (maxBound :: Pixel8))
+                                weightPatch
+         w =
+           case nfp' of
+             1 ->
+               ImageY8 $
+               generateImage
+                 (\j i ->
+                    let v =
+                          fromIntegral . round $
+                          normalizedWeightPatch ! (Z :. j :. i :. 0)
+                    in v)
+                 nyp'
+                 nxp'
+             3 ->
+               ImageRGB8 $
+               generateImage
+                 (\j i ->
+                    let r =
+                          fromIntegral . round $
+                          normalizedWeightPatch ! (Z :. j :. i :. 0)
+                        g =
+                          fromIntegral . round $
+                          normalizedWeightPatch ! (Z :. j :. i :. 1)
+                        b =
+                          fromIntegral . round $
+                          normalizedWeightPatch ! (Z :. j :. i :. 2)
+                    in PixelRGB8 r g b)
+                 nyp'
+                 nxp'
+     savePngImage filePath w 
 
 
-weightedSum :: PVPWeight -> Array U DIM1 Double -> Array U DIM3 Double
-weightedSum weightPatches w 
-  | 
-  where Z :. nyp' :. nxp' :. nfp' :. numPatches' = extent weightPatches
-        Z :. n' = extent w
+weightedSum
+  :: PVPWeight -> Array U DIM1 Double -> Array U DIM3 Double
+weightedSum weightPatches a = foldS (+) 0 arr
+  where arr =
+          traverse2 weightPatches
+                    a
+                    (\sh _ -> sh)
+                    (\fwp fa sh@(Z :. _j :. _i :. _k :. n) ->
+                       (fwp sh) * (fa (Z :. n)))

@@ -40,7 +40,7 @@ data PVPHeader =
             ,nb           :: Int
             ,nBands       :: Int
             ,time         :: Double
-            ,weightHeader :: PVPWeightHeader}
+            ,weightHeader :: PVPWeightHeader} deriving Show
 
 data PVPWeightHeader =
   PVPWeightHeader {nxp        :: Int

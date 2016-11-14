@@ -29,5 +29,6 @@ gaussian
   :: Gaussian -> DataVec Double -> Double
 gaussian (Gaussian numDims' mu' sigma') xs = result
   where !y = productVec sigma'
-        !z = (-0.5) * (sumVec $ merge (/) (merge (-) xs mu') sigma')
-        !result = (exp z) / y
+        !z = (-0.5) * (sumVec $ powVec 2 ((mu' - xs) / sigma'))
+        !a = (2*pi) ** (0.5 * (fromIntegral $ lengthVec mu'))
+        !result = (exp z) / (y)
