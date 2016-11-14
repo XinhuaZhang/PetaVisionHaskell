@@ -392,8 +392,12 @@ extractScliceVec :: Arr.Array (Int,Int,Int) Double
                  -> Int
                  -> V.Vector (VU.Vector Double)
 extractScliceVec arr featureIndex =
-  V.map (\y -> VU.map (\x -> arr Arr.! (x,y,featureIndex)) $ VU.generate nx id) $
-  V.generate ny id
+  V.map (\y ->
+           VU.map (\x -> arr Arr.! (x,y,featureIndex)) $
+           VU.generate (nx + 1)
+                       id) $
+  V.generate (ny + 1)
+             id
   where ((_,_,_),(ny,nx,_nf)) = bounds arr
   
 
