@@ -1,0 +1,10 @@
+#!/bin/bash
+
+export OMP_NUM_THREADS=28
+FLAG="--make -O2 -rtsopts -j4 -threaded " #-funbox-strict-fields
+LIBS="-lgomp -lstdc++ -lblas -L/usr/local/cuda-7.5/lib64/stubs"
+OBJPATH="../../Classifier/LibLinear/"
+
+
+ghc $FLAG $LIBS -i../../ Train.hs -o trainGMM
+ghc $FLAG $LIBS -i../../ PlotWeight.hs -o plotWeight

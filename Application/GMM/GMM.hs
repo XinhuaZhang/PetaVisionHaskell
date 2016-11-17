@@ -182,7 +182,7 @@ updateSigmaKGMM modelK zs xs nk newMuK =
   addFoldVec .
   V.zipWith (\z x ->
 --               scalarMulVec (assignPoint modelK z x) . powVec 2 $ (newMuK - x))
-               scalarMulVec (assignPoint modelK z x) . powVec 2 $ x)
+               scalarMulVec (assignPoint modelK z x) . powVec 2 $ x) -- assuming mu is zero
             zs $
   xs
           
