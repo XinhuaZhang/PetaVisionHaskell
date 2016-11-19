@@ -57,25 +57,15 @@ assignGMM parallelParams gmm@(MixtureModel n modelVec) xs
        print $ modelVec V.! (V.head smallVarIdx)
        newModel <- resetGMM gmm smallVarIdx
        assignGMM parallelParams newModel xs
-  | isJust zeroZIdx =
-    error $
-    "There is one data point which is assigned to none of the model. Try to increase the initialization range of sigma and to decrease that of mu.\n" P.++
-    (show (xs V.! fromJust zeroZIdx)) P.++
-    "\n" P.++
-    (show $ probability (xs V.! fromJust zeroZIdx))
-  | V.length zeroKIdx > 0 =
-    do putStrLn "There are models which have no point assigned to them! Reset them now."
-       print zeroKIdx
-       newModel <- resetGMM gmm zeroKIdx
-       assignGMM parallelParams newModel xs
-  | otherwise =
-    do let x = V.head xs
-           (Model (_,(Gaussian _ mu' sigma'))) = V.head modelVec
-           a = mu' - x
-           b = powVec 2 (a / sigma')
-           c = exp (-0.5 * sumVec b)
-           d = productVec sigma'
-           e = (2 * pi) ** (0.5 * (P.fromIntegral $ lengthVec sigma'))
+  | V.length nanZIdx > 0 = error "Nan found! The variance is so small that the Gaussian probability equls to infinity * 0 = nan."
+  | V.length zeroZIdx > 0 =
+    do -- let x = xs V.! fromJust zeroZIdx
+       --     (Model (_,(Gaussian _ mu' sigma'))) = V.head modelVec
+       --     a = mu' - x
+       --     b = powVec 2 (a / sigma')
+       --     c = exp (-0.5 * sumVec b)
+       --     d = productVec sigma'
+       --     e = (2 * pi) ** (0.5 * (P.fromIntegral $ lengthVec sigma'))
        -- print mu'
        -- print sigma'
        -- print x
@@ -85,7 +75,19 @@ assignGMM parallelParams gmm@(MixtureModel n modelVec) xs
        -- print c
        -- print d
        -- print $ c / d / e
-       return (zs,nks,likelihood,gmm)
+       print $ V.length zeroZIdx
+       error $
+         "There is one data point which is assigned to none of the model. Try to increase the initialization range of sigma and to decrease that of mu.\n" 
+       -- P.++
+       --   (show (xs V.! fromJust zeroZIdx)) P.++
+       --   "\n" P.++
+       --   (show $ probability (xs V.! fromJust zeroZIdx))
+  | V.length zeroKIdx > 0 =
+    do putStrLn "There are models which have no point assigned to them! Reset them now."
+       print zeroKIdx
+       newModel <- resetGMM gmm zeroKIdx
+       assignGMM parallelParams newModel xs
+  | otherwise = do return (zs,nks,likelihood,gmm)
   where !zs =
           parMapChunkVector
             parallelParams
@@ -101,14 +103,15 @@ assignGMM parallelParams gmm@(MixtureModel n modelVec) xs
             (\m -> V.sum . V.zipWith (\z x -> assignPoint m z x) zs $ xs)
             modelVec
         likelihood = getLikelihood zs
-        zeroZIdx = V.findIndex (== 0) zs
+        nanZIdx = V.findIndices isNaN zs
+        zeroZIdx = V.findIndices (\x -> x == 0 ) zs
         zeroKIdx =
-          V.findIndices (\x -> x == 0 || isNaN x)
+          V.findIndices (\x -> x == 0 )
                         nks
         smallVarIdx =
           V.findIndices
             (\(Model (w,Gaussian _ _ sigmaVec)) ->
-               case findVec (< 0.0001) sigmaVec of
+               case findVec (< 0.05) sigmaVec of
                  Nothing -> False
                  Just _ -> True)
             modelVec
@@ -220,7 +223,8 @@ em :: ParallelParams
 em parallelParams filePath xs threshold oldLikelihood oldModel =
   do (zs,nks,newLikelihood,intermediateModel) <-
        assignGMM parallelParams oldModel xs
-     let newMu = updateMuGMM parallelParams intermediateModel zs xs nks
+     let --newMu = updateMuGMM parallelParams intermediateModel zs xs nks
+         newMu = (\(MixtureModel _ vec) -> V.map (\(Model (_,gm)) -> mu gm) vec) intermediateModel 
          newSigma =
            updateSigmaGMM parallelParams intermediateModel zs xs nks newMu
          !newW =
@@ -230,8 +234,6 @@ em parallelParams filePath xs threshold oldLikelihood oldModel =
            numDims . snd . (\(Model x) -> x) . V.head . model $
            intermediateModel
          !newModel =
-           newW `par`
-           newMu `pseq`
            MixtureModel (numModel intermediateModel) $
            V.zipWith3 (\w mu sigma -> Model (w,Gaussian nD mu sigma))
                       newW
@@ -252,14 +254,13 @@ em parallelParams filePath xs threshold oldLikelihood oldModel =
         else do liftIO $ encodeFile filePath intermediateModel
                 em parallelParams filePath xs threshold avgLikelihood newModel
 
-
 initializeGMM :: Int -> Int -> IO GMM
 initializeGMM numModel numDimension =
   do time <- getCurrentTime
      let gen = mkStdGen . P.fromIntegral . diffTimeToPicoseconds . utctDayTime $ time
          (w',gen1) =
            randomRList numModel
-                       (1,100)
+                       (1,1000)
                        gen
          ws' = P.sum $ w'
          w = V.fromList $ P.map (/ ws') w'
@@ -310,7 +311,8 @@ gmmSink parallelParams numM threshold filePath =
        if fileFlag
           then do fileSize <- liftIO $ getFileSize filePath
                   if (fileSize > 0)
-                     then decodeFile filePath
+                     then do putStrLn "Read GMM model from file."
+                             decodeFile filePath
                      else initializeGMM numM
                                         (lengthVec . V.head . P.head $ xs)
           else initializeGMM numM

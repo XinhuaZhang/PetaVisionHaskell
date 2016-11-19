@@ -27,8 +27,8 @@ main =
                    (poolingType params)
                    (poolingSize params)
                    0 =$=
-       pooledFeatureConduit parallelParams 192 =$=
-       --  featureConduit parallelParams =$=
+      pooledFeatureConduit parallelParams 192 =$=
+       -- featureConduit parallelParams =$=
        gmmSink parallelParams
                (numGaussian params)
                (threshold params)
