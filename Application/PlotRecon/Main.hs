@@ -15,7 +15,7 @@ main = do
   recon <- pvpFileSource reconFile $$ CL.head
   dir <- getCurrentDirectory
   removePathForcibly (dir P.++ "/Recon")
-  createDirectoryIfMissing True (dir P.++ "/Recon/" P.++ folderName)
+  createDirectoryIfMissing True (dir P.++ "/Recon")
   case recon of
     Nothing -> error "Read recon error"
     Just (PVP_OUTPUT_NONSPIKING_ACT (PVPDimension nx ny nf) y) -> do
