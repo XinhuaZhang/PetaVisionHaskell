@@ -11,13 +11,15 @@ import           PetaVision.PVPFile.IO
 import           Prelude                as P
 import           System.Directory
 import           System.Environment
+import Control.Monad as M
+import Control.Monad.Parallel as MP
 
 main = do
   reconFiles <- getArgs
   recons <- P.mapM (\reconFile -> pvpFileSource reconFile $$ CL.head) reconFiles
   dir <- getCurrentDirectory
   createDirectoryIfMissing True (dir P.++ "/Recon")
-  if P.any isNothg recons
+  if P.any isNothing recons
     then error "Read recon error"
     else let arrs =
                L.map
@@ -37,15 +39,14 @@ main = do
                  reconFiles
              combinedArr =
                normalizeWeightPatch (P.fromIntegral (maxBound :: Pixel8)) .
-               L.foldl1' (+^) $
+               computeUnboxedS . L.foldl1' (+^) . L.map delay $
                arrs
-         in L.zipWithM_
-              (\fileName normalizedArr ->
-                  plotWeightPatch
-                    (dir P.++ "/Recon/" P.++ fileName P.++ ".png")
-                    normalizedArr)
-              fileNames
-              normalizedArrs
-              plotWeightPatch
-              (dir P.++ "/Recon/recon.png")
-              combinedArr
+         in do MP.sequence_ $
+                 L.zipWith
+                   (\fileName normalizedArr ->
+                       plotWeightPatch
+                         (dir P.++ "/Recon/" P.++ fileName P.++ ".png")
+                         normalizedArr)
+                   fileNames
+                   normalizedArrs
+               plotWeightPatch (dir P.++ "/Recon/recon.png") combinedArr
