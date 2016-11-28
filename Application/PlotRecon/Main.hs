@@ -9,17 +9,19 @@ import           PetaVision.PVPFile.IO
 import           Prelude                as P
 import           System.Directory
 import           System.Environment
+import Data.List as L
 
 main = do
   (reconFile:_) <- getArgs
   recon <- pvpFileSource reconFile $$ CL.head
   dir <- getCurrentDirectory
-  removePathForcibly (dir P.++ "/Recon")
-  createDirectoryIfMissing True (dir P.++ "/Recon/" P.++ folderName)
+  createDirectoryIfMissing True (dir P.++ "/Recon")
   case recon of
     Nothing -> error "Read recon error"
     Just (PVP_OUTPUT_NONSPIKING_ACT (PVPDimension nx ny nf) y) -> do
       let arr = R.fromUnboxed (Z :. ny :. nx :. nf) y
           normalizedWP =
             normalizeWeightPatch (P.fromIntegral (maxBound :: Pixel8)) arr
-      plotWeightPatch (dir P.++ "/Recon/" P.++ reconFile P.++ ".png") normalizedWP
+          ind = L.findIndices (=='/') reconFile
+          (_,fileName) = L.splitAt (L.last ind) reconFile
+      plotWeightPatch (dir P.++ "/Recon/" P.++ fileName P.++ ".png") normalizedWP
