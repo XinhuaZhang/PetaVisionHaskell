@@ -52,7 +52,7 @@ plotWeight filePath weight =
                P.map (\n ->
                         ImageRGB8 $
                         generateImage
-                          (\j i ->
+                          (\i j ->
                              let r =
                                    fromIntegral . round $
                                    normalizedW ! (Z :. j :. i :. 0 :. n)
@@ -70,7 +70,7 @@ plotWeight filePath weight =
                P.map (\n ->
                         ImageY8 $
                         generateImage
-                          (\j i ->
+                          (\i j ->
                              let v =
                                    fromIntegral . round $
                                    normalizedW ! (Z :. j :. i :. 0 :. n)
@@ -98,7 +98,7 @@ plotWeightPatch filePath weightPatch =
              1 ->
                ImageY8 $
                generateImage
-                 (\j i ->
+                 (\i j ->
                     let v =
                           fromIntegral . round $
                           normalizedWeightPatch ! (Z :. j :. i :. 0)
@@ -108,7 +108,7 @@ plotWeightPatch filePath weightPatch =
              3 ->
                ImageRGB8 $
                generateImage
-                 (\j i ->
+                 (\i j ->
                     let r =
                           fromIntegral . round $
                           normalizedWeightPatch ! (Z :. j :. i :. 0)
