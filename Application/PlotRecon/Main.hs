@@ -11,10 +11,10 @@ import           System.Directory
 import           System.Environment
 
 main = do
-  (reconFile:folderName:_) <- getArgs
+  (reconFile:_) <- getArgs
   recon <- pvpFileSource reconFile $$ CL.head
   dir <- getCurrentDirectory
-  removePathForcibly (dir P.++ "/Recon/" P.++ folderName)
+  removePathForcibly (dir P.++ "/Recon")
   createDirectoryIfMissing True (dir P.++ "/Recon/" P.++ folderName)
   case recon of
     Nothing -> error "Read recon error"
@@ -22,4 +22,4 @@ main = do
       let arr = R.fromUnboxed (Z :. ny :. nx :. nf) y
           normalizedWP =
             normalizeWeightPatch (P.fromIntegral (maxBound :: Pixel8)) arr
-      plotWeightPatch (dir P.++ "/Recon/" P.++ folderName) normalizedWP
+      plotWeightPatch (dir P.++ "/Recon/" P.++ reconFile P.++ ".png") normalizedWP
