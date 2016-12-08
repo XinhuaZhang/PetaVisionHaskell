@@ -7,5 +7,6 @@ OBJPATH="../../Classifier/LibLinear/"
 
 
 ghc $FLAG $LIBS -i../../ Train.hs -o trainGMM
+ghc $FLAG $LIBS -i../../ ConvertPVPGMM.hs -o convertPVPGMM
 # ghc $FLAG $LIBS -i../../ $OBJPATH/linear.o $OBJPATH/tron.o TrainFisher.hs -o trainFisher
 # ghc $FLAG $LIBS -i../../ $OBJPATH/linear.o $OBJPATH/tron.o PredictFisher.hs -o predictFisher
