@@ -1,116 +1,95 @@
-{-# LANGUAGE BangPatterns  #-}
-{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE BangPatterns #-}
 module Application.GMM.FisherKernel where
 
 import           Application.GMM.Gaussian
 import           Application.GMM.GMM
 import           Application.GMM.MixtureModel
-import           Application.GMM.Representation
-import           Control.DeepSeq                as DS
-import           Control.Monad.IO.Class
-import           Data.Binary
-import           Data.ByteString.Lazy           as BL
+import           Control.Monad
+import           CV.Utility.Parallel
 import           Data.Conduit
-import           Data.Conduit.List              as CL
-import           Data.List                      as L
-import           Data.Maybe
-import           Data.Vector                    as V
-import           Data.Vector.Unboxed            as VU
-import           GHC.Float
-import           PetaVision.Utility.Parallel
-import           Prelude                        as P
-import           System.IO
+import           Data.Conduit.List            as CL
+import           Data.List                    as L
+import           Data.Vector                  as V
+import           Data.Vector.Unboxed          as VU
 
+fisherVectorMu :: ParallelParams -> [GMM] -> [AssignmentVec] -> [VU.Vector Double] -> VU.Vector Double
+fisherVectorMu parallelParams gmms assignments xs =
+  VU.concat $
+  parZipWith3Chunk
+    parallelParams
+    rdeepseq
+    (\(MixtureModel _ modelVec) assignment x ->
+       let !muVec =
+             V.convert . V.map (\(Model m) -> gaussianMu . snd $ m) $ modelVec
+           !sigmaVec =
+             V.convert . V.map (\(Model m) -> gaussianSigma . snd $ m) $
+             modelVec
+           !wVec = V.convert . V.map (\(Model m) -> fst m) $ modelVec
+       in VU.zipWith3
+            (\wk sigma' y ->
+               y * sqrt (sigma' / (fromIntegral (VU.length x) * wk)))
+            wVec
+            sigmaVec .
+          V.foldl1' (VU.zipWith (+)) .
+          V.zipWith (\an xn ->
+                       VU.zipWith3 (\mu' sigma' a -> a * (xn - mu') / sigma')
+                                   muVec
+                                   sigmaVec
+                                   an)
+                    assignment .
+          VU.convert $
+          x)
+    gmms
+    assignments
+    xs
 
-fisherVectorSigma :: GMM
-                  -> V.Vector Double
-                  -> V.Vector GMMData
+fisherVectorSigma :: ParallelParams
+                  -> [GMM]
+                  -> [AssignmentVec]
+                  -> [VU.Vector Double]
                   -> VU.Vector Double
-fisherVectorSigma gmm@(MixtureModel n modelVec) zs xs =
-  VU.fromList . P.concat . V.toList . V.map (toListDense) $ newSigmaK
-  where !numData = P.fromIntegral . V.length $ xs
-        !newSigmaK =
-          V.map (\gmk@(Model (wk,(Gaussian _nd _muK sigmaK))) ->
-                   scalarMulVec ((2 * numData * wk) ** (-0.5)) .
-                   addFoldVec .
-                   V.zipWith (\z x ->
-                                let !assignment = assignPoint gmk z x
-                                in scalarMulVec assignment .
-                                   scalarAddVec (-1) . powVec 2 $
-                                   (x / sigmaK))
-                             zs $
-                   xs)
-                modelVec
+fisherVectorSigma parallelParams gmms assignments xs =
+  VU.concat $
+  parZipWith3Chunk
+    parallelParams
+    rdeepseq
+    (\(MixtureModel _ modelVec) assignment x ->
+       let !muVec =
+             V.convert . V.map (\(Model m) -> gaussianMu . snd $ m) $ modelVec
+           !sigmaVec =
+             V.convert . V.map (\(Model m) -> gaussianSigma . snd $ m) $
+             modelVec
+           !wVec = V.convert . V.map (\(Model m) -> fst m) $ modelVec
+       in VU.zipWith
+            (\wk y -> y * sqrt (0.5 / (fromIntegral (VU.length x) * wk)))
+            wVec .
+          V.foldl1' (VU.zipWith (+)) .
+          V.zipWith (\an xn ->
+                       VU.zipWith3
+                         (\mu' sigma' a ->
+                            a * ((xn - mu') ^ (2 :: Int) / sigma' - 1))
+                         muVec
+                         sigmaVec
+                         an)
+                    assignment .
+          VU.convert $
+          x)
+    gmms
+    assignments
+    xs
 
 fisherVectorConduit
-  :: ParallelParams -> GMM -> Conduit (V.Vector GMMData) IO (VU.Vector Double)
-fisherVectorConduit parallelParams gmm =
-  do xs <- CL.take (batchSize parallelParams)
-     if P.length xs > 0
-        then let !ys =
-                   parMapChunk
-                     parallelParams
-                     rdeepseq
-                     (\x ->
-                        let !z =
-                              V.map (\y ->
-                                       V.foldl' (\s (Model (wj,mj)) ->
-                                                   s + (wj * gaussian mj y))
-                                                0 $
-                                       (model gmm))
-                                    x
-                            vec = fisherVectorSigma gmm z x
-                            powerNormVec =
-                              VU.map (\x ->
-                                        if x > 0
-                                           then x ** (0.5)
-                                           else -((-x) ** (0.5)))
-                                     vec
-                            !l2Norm =
-                              sqrt (VU.foldl' (\a b -> a + b ^ 2) 0 vec)
-                        in VU.map (/ l2Norm) vec)
-                     xs
-             in do sourceList ys
-                   fisherVectorConduit parallelParams gmm
-        else return ()
-
-
-fisherVectorTestSink
-  :: ParallelParams -> GMM -> Sink (V.Vector GMMData) IO ()
-fisherVectorTestSink parallelParams gmm =
-  do x <- await
-     case x of
-       Nothing -> liftIO $ P.putStrLn "No data"
-       Just y ->
-         let !zs =
-               V.map (\y' ->
-                        V.foldl' (\s (Model (wj,mj)) ->
-                                    s + (wj * gaussian mj y'))
-                                 0 $
-                        (model gmm))
-                     y
-             result = VU.toList $ fisherVectorSigma gmm zs y
-             gm0 = (model gmm) V.! 0
-             gm1 = (model gmm) V.! 1
-             w1 = (\(Model (w1',_)) -> w1') gm1
-             w0 = (\(Model (w0',_)) -> w0') gm0
-             !numData = P.fromIntegral . V.length $ y
-             hehe =
-               V.zipWith (\z x' ->
-                            (assignPoint gm1 z x') / (w1) -
-                            (assignPoint gm0
-                                         (V.head zs)
-                                         x') /
-                            (w0))
-                         zs
-                         y
-             haha = (numData * (1 / w1 + 1 / w0)) ** (-0.5)
-         in do liftIO $ print . P.take 5 $ result
-               liftIO $ print $ V.take 5 $ hehe
-               liftIO $ print haha
-               liftIO $ print $ V.sum hehe
-               liftIO $
-                 print $
-                  haha * (V.sum hehe)
-
+  :: ParallelParams
+  -> [GMM]
+  -> Conduit (Int,[VU.Vector Double]) IO (Int,VU.Vector Double)
+fisherVectorConduit parallelParams gmms =
+  awaitForever
+    (\(label,x) ->
+       let !assignments =
+             parZipWithChunk parallelParams rdeepseq getAssignmentVec gmms x
+           !vecMu = fisherVectorMu parallelParams gmms assignments x
+           !vecSigma = fisherVectorSigma parallelParams gmms assignments x
+           !vec = vecMu VU.++ vecSigma
+           !l2Norm = sqrt (VU.foldl' (\a b -> a + b ^ (2 :: Int)) 0 vec)
+       in yield (label,VU.map (/ l2Norm) vec))
 

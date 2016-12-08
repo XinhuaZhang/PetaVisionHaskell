@@ -19,7 +19,7 @@ import           PetaVision.PVPFile.IO
 import           PetaVision.Utility.Parallel
 import           System.IO
 
--- convert a PVP file to a list of totalNumEle nonzeroEle1 nonzeroEle2 nonzeroEle3 ...
+-- convert a PVP file to a list of numZero nonzeroEle1 nonzeroEle2 nonzeroEle3 ...
 -- This is for GMM only. It is feature wise conversion
 
 
@@ -79,5 +79,6 @@ featureConduit = do
                 let size' = fromIntegral (decode sizeBs :: Word32) :: Int
                 xsBs <- CB.take size'
                 return $ decode xsBs)
-        yield (totalImageNum * imageSize, VU.fromList . L.concat $ xss)
+        let !vec = VU.map (*100) . VU.fromList . L.concat $ xss
+        yield (totalImageNum * imageSize - VU.length vec, vec)
         featureConduit)
