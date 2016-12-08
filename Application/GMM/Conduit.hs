@@ -56,5 +56,5 @@ pooledFeatureConduit parallelParams nf =
           V.fromList .
           P.map (fromListSparse nf . P.map (\((_,j),x) -> (j,x))) .
           L.groupBy (\((ix,_),_) ((iy,_),_) -> ix == iy) .
-          VU.toList . VU.map (\(i,x) -> ((div i nf,mod i nf),50 * x)) $
+          VU.toList . VU.map (\(i,x) -> ((div i nf,mod i nf),60 * x)) $
           xs
