@@ -3,6 +3,7 @@ module Main where
 import           Application.GMM.ArgsParser           as Parser
 import           Application.GMM.ConvertPVPGMMConduit
 import           Application.GMM.GMM
+import           Control.Monad.Trans.Resource
 import           Data.Array.Repa                      as R
 import           Data.Conduit
 import           Data.Conduit.Binary                  as CB
@@ -22,11 +23,12 @@ main = do
   let parallelParams =
         ParallelParams (Parser.numThread params) (Parser.batchSize params)
   print params
-  sourceFile (P.head $ pvpFile params) $$ featureConduit =$=
-    gmmSink
-      parallelParams
-      (gmmFile params)
-      (numGaussian params)
-      192
-      ((0, 500), (0.1, 1000))
-      (threshold params)
+  runResourceT
+    (sourceFile (P.head $ pvpFile params) $$ featureConduit =$=
+     gmmSink
+       parallelParams
+       (gmmFile params)
+       (numGaussian params)
+       192
+       ((0, 500), (0.1, 1000))
+       (threshold params))

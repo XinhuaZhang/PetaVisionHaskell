@@ -17,6 +17,7 @@ import           Control.DeepSeq              as DS
 import           Control.Monad                as M
 import           Control.Monad.IO.Class
 import           Control.Monad.Parallel       as MP
+import           Control.Monad.Trans.Resource
 import           Data.Binary
 import           Data.ByteString.Lazy         as BL
 import           Data.Conduit
@@ -44,7 +45,7 @@ instance NFData ResetOption where
 data EMState a
   = EMDone !Double
            !a
-  | EMContinue !Assignment
+  | EMContinue Assignment
                Double
                !a
   | EMReset !ResetOption
@@ -148,7 +149,7 @@ updateMu :: Assignment -> VU.Vector Double -> VU.Vector Double -> VU.Vector Doub
 updateMu (_assignment0, assignmentVec) nks =
   VU.zipWith (flip (/)) nks .
   V.foldl1' (VU.zipWith (+)) .
-  V.zipWith (\assignment x -> VU.map (* x) assignment) assignmentVec . VU.convert 
+  V.zipWith (\assignment x -> VU.map (* x) assignment) assignmentVec . VU.convert
 
 updateSigma
   :: Assignment
@@ -164,7 +165,7 @@ updateSigma (assignment0, assignmentVec) nks newMu =
     (\assignment x ->
         VU.zipWith (\a mu -> a * (x - mu) ^ (2 :: Int)) assignment newMu)
     assignmentVec .
-  VU.convert 
+  VU.convert
 
 updateW :: Int -> VU.Vector Double -> VU.Vector Double
 updateW n w = VU.map (/ VU.sum vec) vec
@@ -257,7 +258,7 @@ gmmSink
   -> Int
   -> ((Double, Double), (Double, Double))
   -> Double
-  -> Sink (Int, VU.Vector Double) IO ()
+  -> Sink (Int, VU.Vector Double) (ResourceT IO) ()
 gmmSink parallelParams filePath numM numFeature bound threshold = do
   fileFlag <- liftIO $ doesFileExist filePath
   models <-
@@ -277,7 +278,7 @@ gmmSink parallelParams filePath numM numFeature bound threshold = do
   liftIO $ hClose handle
   where
     go h gmms = do
-      xs <- CL.take (numThread parallelParams)
+      xs <- CL.take (batchSize parallelParams)
       unless
         (L.null xs)
         (do let !(as, bs) = L.splitAt (L.length xs) gmms

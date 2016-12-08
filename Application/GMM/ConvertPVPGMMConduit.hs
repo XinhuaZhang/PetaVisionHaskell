@@ -1,19 +1,20 @@
-{-# LANGUAGE BangPatterns  #-}
+{-# LANGUAGE BangPatterns #-}
 module Application.GMM.ConvertPVPGMMConduit where
 
 
-import           Control.Monad               as M
+import           Control.Monad                as M
 import           Control.Monad.IO.Class
-import           Data.Array.Repa             as R
+import           Control.Monad.Trans.Resource
+import           Data.Array.Repa              as R
 import           Data.Binary
-import           Data.ByteString             as BS
-import           Data.ByteString.Lazy        as BL
-import           Data.Conduit                as C
-import           Data.Conduit.Binary         as CB
-import           Data.Conduit.List           as CL
-import           Data.List                   as L
-import           Data.Vector                 as V
-import           Data.Vector.Unboxed         as VU
+import           Data.ByteString              as BS
+import           Data.ByteString.Lazy         as BL
+import           Data.Conduit                 as C
+import           Data.Conduit.Binary          as CB
+import           Data.Conduit.List            as CL
+import           Data.List                    as L
+import           Data.Vector                  as V
+import           Data.Vector.Unboxed          as VU
 import           GHC.Generics
 import           PetaVision.PVPFile.IO
 import           PetaVision.Utility.Parallel
@@ -64,7 +65,7 @@ hFeatureSink h totalNumImage imageSize = do
 
 
 
-featureConduit :: Conduit BS.ByteString IO (Int,VU.Vector Double)
+featureConduit :: Conduit BS.ByteString (ResourceT IO) (Int,VU.Vector Double)
 featureConduit = do
   totalImageNumBs <- CB.take 4
   unless
@@ -79,6 +80,6 @@ featureConduit = do
                 let size' = fromIntegral (decode sizeBs :: Word32) :: Int
                 xsBs <- CB.take size'
                 return $ decode xsBs)
-        let !vec = VU.map (*100) . VU.fromList . L.concat $ xss
+        let !vec = VU.map (*1000) . VU.fromList . L.concat $ xss
         yield (totalImageNum * imageSize - VU.length vec, vec)
         featureConduit)
