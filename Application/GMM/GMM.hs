@@ -3,6 +3,7 @@
 module Application.GMM.GMM
   ( GMM
   , AssignmentVec
+  , Assignment
   , getAssignmentVec
   , gmmSink
   , readGMM
