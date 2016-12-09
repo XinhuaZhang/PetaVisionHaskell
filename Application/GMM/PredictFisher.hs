@@ -1,7 +1,7 @@
 module Main where
 
 import           Application.GMM.ArgsParser   as Parser
-import           Application.GMM.Conduit
+import           Application.GMM.ConvertPVPGMMConduit
 import           Application.GMM.FisherKernel
 import           Application.GMM.GMM
 import           Application.GMM.MixtureModel
@@ -36,11 +36,7 @@ main =
                           (Parser.batchSize params)
      print params
      pvpFileSource (P.head $ pvpFile params) $$
-       poolConduit parallelParams
-                   (poolingType params)
-                   (poolingSize params)
-                   0 =$=
-       pooledFeatureConduit parallelParams 192 =$=
+       unpooledSparse2NonsparseImageConduit parallelParams =$=
        fisherVectorConduit parallelParams gmm =$=
        CL.mapM (getFeatureVecPtr . Dense . VU.toList) =$=
        mergeSource (labelSource $ labelFile params) =$=

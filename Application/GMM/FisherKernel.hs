@@ -101,10 +101,10 @@ fisherVectorSigma parallelParams gmms assignments xs =
 fisherVectorConduit
   :: ParallelParams
   -> [GMM]
-  -> Conduit (Int, [(Int, VU.Vector Double)]) IO (Int, VU.Vector Double)
+  -> Conduit [(Int, VU.Vector Double)] IO (VU.Vector Double)
 fisherVectorConduit parallelParams gmms =
   awaitForever
-    (\(label, x) ->
+    (\x ->
         let !assignments =
               parZipWithChunk parallelParams rdeepseq getAssignmentVec gmms .
               snd . L.unzip $
@@ -113,4 +113,4 @@ fisherVectorConduit parallelParams gmms =
             !vecSigma = fisherVectorSigma parallelParams gmms assignments x
             !vec = vecMu VU.++ vecSigma
             !l2Norm = sqrt (VU.foldl' (\a b -> a + b ^ (2 :: Int)) 0 vec)
-        in yield (label, VU.map (/ l2Norm) vec))
+        in yield . VU.map (/ l2Norm) $ vec)

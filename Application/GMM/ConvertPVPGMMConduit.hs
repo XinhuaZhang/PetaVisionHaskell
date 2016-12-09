@@ -13,9 +13,7 @@ import           Data.Conduit                 as C
 import           Data.Conduit.Binary          as CB
 import           Data.Conduit.List            as CL
 import           Data.List                    as L
-import           Data.Vector                  as V
 import           Data.Vector.Unboxed          as VU
-import           GHC.Generics
 import           PetaVision.PVPFile.IO
 import           PetaVision.Utility.Parallel
 import           System.IO
@@ -50,6 +48,38 @@ unpooledSparse2NonsparseConduit parallelParams ind = do
                 xs
         sourceList ys
         unpooledSparse2NonsparseConduit parallelParams ind)
+        
+
+unpooledSparse2NonsparseImageConduit :: ParallelParams
+                                     -> Conduit PVPOutputData IO [(Int,VU.Vector Double)]
+unpooledSparse2NonsparseImageConduit parallelParams = do
+  xs <- CL.take (batchSize parallelParams)
+  unless
+    (L.null xs)
+    (do let ys =
+              parMapChunk
+                parallelParams
+                rdeepseq
+                (\x ->
+                    case x of
+                      PVP_OUTPUT_ACT_SPARSEVALUES (PVPDimension nx' ny' nf') indX ->
+                        let !vec =
+                              VU.accum (+) (VU.replicate totalNumEle 0) indX
+                            !arr = R.fromUnboxed (Z :. ny' :. nx' :. nf') vec
+                            !totalNumEle = nx' * ny' * nf'
+                        in L.map
+                             (\ind ->
+                                 let !vec1 =
+                                       VU.filter (/= 0) . toUnboxed . computeS $
+                                       R.slice arr (Z :. All :. All :. ind)
+                                 in (totalNumEle - VU.length vec1, vec1) )
+                             [0 .. nf' - 1]
+                      _ ->
+                        error
+                          "unpooledSparse2Nonsparse: PVP_OUTPUT_ACT_SPARSEVALUES is only one supported format")
+                xs
+        sourceList ys
+        unpooledSparse2NonsparseImageConduit parallelParams)
 
 hFeatureSink :: Handle -> Int -> Int -> Sink (VU.Vector Double) IO Handle
 hFeatureSink h totalNumImage imageSize = do
