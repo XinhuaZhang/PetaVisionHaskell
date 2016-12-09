@@ -174,10 +174,12 @@ updateW n w = VU.map (/ VU.sum vec) vec
 
 emOneStep :: Double -> EMState GMM -> (Int, VU.Vector Double) -> EMState GMM
 emOneStep _ x@(EMDone _ _) _ = x
-emOneStep threshold (EMContinue oldAssignmentVec _ oldGMM) (n, xs)
+emOneStep threshold (EMContinue oldAssignmentVec oldAvgLikelihood oldGMM) (n, xs)
   | not (V.null zeroNaNNKIdx) = EMReset (ResetIndex zeroNaNNKIdx) oldGMM
   | isJust zeroZIdx = EMReset ResetAll oldGMM
-  | newAvgLikelihood > threshold = EMDone newAvgLikelihood newGMM
+  | newAvgLikelihood > threshold ||
+      abs ((newAvgLikelihood - oldAvgLikelihood) / oldAvgLikelihood) < 0.001 =
+    EMDone newAvgLikelihood newGMM
   | otherwise = EMContinue newAssignmentVec newAvgLikelihood newGMM
   where
     !nks = getNks n oldAssignmentVec
