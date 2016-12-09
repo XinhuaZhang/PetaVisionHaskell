@@ -83,3 +83,5 @@ featureConduit = do
         let !vec = VU.map (*1000) . VU.fromList . L.concat $ xss
         yield (totalImageNum * imageSize - VU.length vec, vec)
         featureConduit)
+
+

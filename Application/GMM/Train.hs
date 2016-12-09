@@ -30,5 +30,6 @@ main = do
        (gmmFile params)
        (numGaussian params)
        192
-       ((0, 500), (0.1, 1000))
-       (threshold params))
+       ((0, 100), (1, 1000))
+       (threshold params)
+    )

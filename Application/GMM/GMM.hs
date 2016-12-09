@@ -5,6 +5,7 @@ module Application.GMM.GMM
   , AssignmentVec
   , getAssignmentVec
   , gmmSink
+  , testSink
   , readGMM
   , writeGMM
   , initializeGMM
@@ -47,6 +48,7 @@ data EMState a
            !a
   | EMContinue Assignment
                Double
+               Double
                !a
   | EMReset !ResetOption
             !a
@@ -54,7 +56,7 @@ data EMState a
 
 instance NFData a =>
          NFData (EMState a) where
-  rnf (EMContinue x y z) = x `seq` y `seq` z `seq` ()
+  rnf (EMContinue x y z zz) = x `seq` y `seq` z `seq` zz `seq` ()
   rnf (EMReset x _y)     = x `seq` ()
   rnf _                  = ()
 
@@ -92,7 +94,7 @@ resetGMMList bound = P.mapM reset
   where
     reset (EMReset option gmm) = do
       newGMM <- resetGMM option gmm bound
-      return $! EMContinue undefined undefined newGMM
+      return $! EMContinue undefined undefined undefined newGMM
     reset gmmState = return gmmState
 
 {-# INLINE getAssignment #-}
@@ -174,13 +176,13 @@ updateW n w = VU.map (/ VU.sum vec) vec
 
 emOneStep :: Double -> EMState GMM -> (Int, VU.Vector Double) -> EMState GMM
 emOneStep _ x@(EMDone _ _) _ = x
-emOneStep threshold (EMContinue oldAssignmentVec oldAvgLikelihood oldGMM) (n, xs)
+emOneStep threshold (EMContinue oldAssignmentVec oldAvgLikelihood _ oldGMM) (n, xs)
   | not (V.null zeroNaNNKIdx) = EMReset (ResetIndex zeroNaNNKIdx) oldGMM
   | isJust zeroZIdx = EMReset ResetAll oldGMM
   | newAvgLikelihood > threshold ||
-      abs ((newAvgLikelihood - oldAvgLikelihood) / oldAvgLikelihood) < 0.001 =
+      abs ((newAvgLikelihood - oldAvgLikelihood) / oldAvgLikelihood) < 0.01 =
     EMDone newAvgLikelihood newGMM
-  | otherwise = EMContinue newAssignmentVec newAvgLikelihood newGMM
+  | otherwise = EMContinue newAssignmentVec newAvgLikelihood newRate newGMM
   where
     !nks = getNks n oldAssignmentVec
     !newMu = updateMu oldAssignmentVec nks xs
@@ -199,6 +201,7 @@ emOneStep threshold (EMContinue oldAssignmentVec oldAvgLikelihood oldGMM) (n, xs
            (VU.convert newSigma))
     !newAssignmentVec = getAssignmentVec newGMM xs
     !newAvgLikelihood = getAvgLikelihood newGMM (n, xs)
+    !newRate = abs ((newAvgLikelihood - oldAvgLikelihood) / oldAvgLikelihood)
 emOneStep _ (EMReset _ _) _ =
   error "emOneStep: There models needed to be reset!"
 
@@ -216,6 +219,7 @@ em handle bound threshold gmms xs =
             (P.sum . P.map getStateLikelihood $ gmms) /
             fromIntegral (P.length gmms)
       printCurrentTime
+      print . P.map getStateLikelihood' $ gmms
       printf "%0.2f\n" avgLikelihood
       hPutGMM handle (P.map getModelDone gmms)
       return handle
@@ -231,24 +235,33 @@ em handle bound threshold gmms xs =
         then IO.putStrLn "Reset"
         else do
           printf "%0.2f\n" avgLikelihood
-          print . P.map getStateLikelihood $ gmms2
+          print . P.map getStateLikelihood' $ newGMMs
       em handle bound threshold newGMMs xs
   where
     checkStateDone EMDone {} = True
-    checkStateDone _         = False
-    computeStateAssignmentLikelihood (EMContinue _ _ m) (n, x) =
+    checkStateDone _ = False
+    computeStateAssignmentLikelihood (EMContinue _ _ _ m) (n, x) =
       let !assignment = getAssignmentVec m x
           !avgLikelihood = getAvgLikelihood m (n, x)
-      in EMContinue assignment avgLikelihood m
+      in EMContinue assignment avgLikelihood (-1) m
     computeStateAssignmentLikelihood EMReset {} _ =
       error
         "computeStateAssignment: All reset state shold have been removed by now."
     computeStateAssignmentLikelihood state _ = state
-    getStateLikelihood (EMContinue _ x _) = x
+    getStateLikelihood (EMContinue _ x _ _) = x
     getStateLikelihood (EMDone x _) = x
     getStateLikelihood _ =
       error
         "getStateLikelihood: All reset state shold have been removed by now."
+    getStateLikelihood' (EMContinue _ x rate _) = ("EMContinue", x, rate)
+    getStateLikelihood' (EMDone x _) = ("EMDone", x, -1)
+    getStateLikelihood' (EMReset x (MixtureModel _ modelVec)) =
+      case x of
+        (ResetIndex vec) ->
+          if V.length vec == 1
+            then ("EMReset " P.++ show x P.++ " " P.++ show (modelVec V.! (V.head vec)), 0, -1)
+            else ("EMReset " P.++ show x, 0, -1)
+        _ -> ("EMReset " P.++ show x, 0, -1)
     getModelDone (EMDone _ m) = m
     getModelDone _ =
       error "getModelDone: There are states which are not done yet."
@@ -290,7 +303,7 @@ gmmSink parallelParams filePath numM numFeature bound threshold = do
                     (\gmm (n, ys) ->
                         let !assignment = getAssignmentVec gmm ys
                             !likelihood = getAvgLikelihood gmm (n, ys)
-                        in EMContinue assignment likelihood gmm)
+                        in EMContinue assignment likelihood (1/0) gmm)
                     as
                     xs
             h' <- liftIO $ em h bound threshold stateGMM xs
@@ -329,3 +342,11 @@ writeGMM filePath gmms =
     (\h -> do
        BL.hPut h (encode (fromIntegral $ P.length gmms :: Word32))
        hPutGMM h gmms)
+
+
+testSink :: Sink (Int,VU.Vector Double) (ResourceT IO) ()
+testSink = do xs <- CL.take 1
+              let (nz,vec) = P.head xs
+              liftIO . print $ nz
+              liftIO . print . VU.length $ vec
+              liftIO . print . VU.maximum $ vec
