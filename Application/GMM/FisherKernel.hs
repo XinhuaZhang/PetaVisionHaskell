@@ -24,7 +24,7 @@ fisherVectorMu parallelParams gmms assignments xs =
   parZipWith3Chunk
     parallelParams
     rdeepseq
-    (\(MixtureModel _ modelVec) (assignment0, assignment) (nz, x) ->
+    (\(MixtureModel numModel' modelVec) (assignment0, assignment) (nz, x) ->
         let !muVec = V.convert . V.map (\(Model m) -> gaussianMu . snd $ m) $ modelVec
             !sigmaVec =
               V.convert . V.map (\(Model m) -> gaussianSigma . snd $ m) $ modelVec
@@ -41,7 +41,7 @@ fisherVectorMu parallelParams gmms assignments xs =
                 muVec
                 sigmaVec
                 assignment0) .
-           V.foldl1' (VU.zipWith (+)) .
+           V.foldl' (VU.zipWith (+)) (VU.replicate numModel' 0) .
            V.zipWith
              (\an xn ->
                  VU.zipWith3
@@ -67,7 +67,7 @@ fisherVectorSigma parallelParams gmms assignments xs =
   parZipWith3Chunk
     parallelParams
     rdeepseq
-    (\(MixtureModel _ modelVec) (assignment0, assignment) (nz, x) ->
+    (\(MixtureModel numModel' modelVec) (assignment0, assignment) (nz, x) ->
         let !muVec = V.convert . V.map (\(Model m) -> gaussianMu . snd $ m) $ modelVec
             !sigmaVec =
               V.convert . V.map (\(Model m) -> gaussianSigma . snd $ m) $ modelVec
@@ -83,7 +83,7 @@ fisherVectorSigma parallelParams gmms assignments xs =
                 muVec
                 sigmaVec
                 assignment0) .
-           V.foldl1' (VU.zipWith (+)) .
+           V.foldl' (VU.zipWith (+)) (VU.replicate numModel' 0) .
            V.zipWith
              (\an xn ->
                  VU.zipWith3
