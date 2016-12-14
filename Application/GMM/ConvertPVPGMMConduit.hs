@@ -17,6 +17,7 @@ import           Data.Vector.Unboxed          as VU
 import           PetaVision.PVPFile.IO
 import           PetaVision.Utility.Parallel
 import           System.IO
+import GHC.Float
 
 -- convert a PVP file to a list of numZero nonzeroEle1 nonzeroEle2 nonzeroEle3 ...
 -- This is for GMM only. It is feature wise conversion
@@ -87,7 +88,7 @@ hFeatureSink h totalNumImage imageSize = do
   liftIO $ BL.hPut h (encode (fromIntegral imageSize :: Word32)) -- 4 bytes
   CL.foldM
     (\handle x -> do
-       let !bs = encode . VU.toList $ x
+       let !bs = encode . L.map double2Float . VU.toList $ x
        BL.hPut handle (encode (fromIntegral . BL.length $ bs :: Word32)) -- 4 bytes
        BL.hPut handle bs
        return handle)
@@ -109,9 +110,7 @@ featureConduit = do
             (do sizeBs <- CB.take 4
                 let size' = fromIntegral (decode sizeBs :: Word32) :: Int
                 xsBs <- CB.take size'
-                return $ decode xsBs)
-        let !vec = VU.map (*1000) . VU.fromList . L.concat $ xss
+                return . L.map float2Double . decode $ xsBs)
+        let !vec = VU.fromList . L.concat $ xss
         yield (totalImageNum * imageSize - VU.length vec, vec)
         featureConduit)
-
-
