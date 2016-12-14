@@ -30,7 +30,7 @@ main =
         else return ()
      params <- parseArgs args
      header <- readPVPHeader . P.head $ pvpFile params
-     gmm <- decodeFile (gmmFile params) :: IO GMM
+     gmm <- readGMM (gmmFile params) :: IO [GMM]
      let parallelParams =
            ParallelParams (Parser.numThread params)
                           (Parser.batchSize params)

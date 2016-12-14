@@ -63,7 +63,7 @@ main =
         else return ()
      params <- parseArgs args
      header <- readPVPHeader . P.head $ pvpFile params
-     gmm <- decodeFile (gmmFile params) :: IO GMM
+     gmm <- readGMM (gmmFile params) :: IO [GMM]
      let parallelParams =
            ParallelParams (Parser.numThread params)
                           (Parser.batchSize params)
@@ -71,7 +71,7 @@ main =
            TrainParams {trainSolver = L2R_L2LOSS_SVC_DUAL
                        ,trainC = c params
                        ,trainNumExamples = nBands header
-                       ,trainFeatureIndexMax = (nf header) * (numModel gmm)
+                       ,trainFeatureIndexMax = 2 * (nf header) * (numModel . P.head $ gmm)
                        ,trainModel = modelName params}
      print params
      pvpFileSource (P.head $ pvpFile params) $$
