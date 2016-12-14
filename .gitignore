@@ -19,3 +19,5 @@ Application/PVPAnalysis/main
 /Application/GMM/trainGMM
 Application/GMM/Weight
 /Application/GMM/PlotWeight.hs
+*.png
+*.bin
