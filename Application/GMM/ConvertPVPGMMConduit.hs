@@ -43,6 +43,10 @@ unpooledSparse2NonsparseConduit parallelParams ind = do
                             !arr = R.fromUnboxed (Z :. ny' :. nx' :. nf') vec
                         in VU.filter (/= 0) . toUnboxed . computeS $
                            R.slice arr (Z :. All :. All :. ind)
+                      PVP_OUTPUT_NONSPIKING_ACT (PVPDimension nx' ny' nf') zs ->
+                        let !arr = R.fromListUnboxed (Z :. ny' :. nx' :. nf') zs
+                        in toUnboxed . computeS $
+                           R.slice arr (Z :. All :. All :. ind)
                       _ ->
                         error
                           "unpooledSparse2Nonsparse: PVP_OUTPUT_ACT_SPARSEVALUES is only one supported format")
@@ -64,8 +68,7 @@ unpooledSparse2NonsparseImageConduit parallelParams = do
                 (\x ->
                     case x of
                       PVP_OUTPUT_ACT_SPARSEVALUES (PVPDimension nx' ny' nf') indX ->
-                        let !vec =
-                              VU.accum (+) (VU.replicate totalNumEle 0) indX
+                        let !vec = VU.accum (+) (VU.replicate totalNumEle 0) indX
                             !arr = R.fromUnboxed (Z :. ny' :. nx' :. nf') vec
                             !totalNumEle = nx' * ny' * nf'
                         in L.map
@@ -73,7 +76,16 @@ unpooledSparse2NonsparseImageConduit parallelParams = do
                                  let !vec1 =
                                        VU.filter (/= 0) . toUnboxed . computeS $
                                        R.slice arr (Z :. All :. All :. ind)
-                                 in (totalNumEle - VU.length vec1, vec1) )
+                                 in (totalNumEle - VU.length vec1, vec1))
+                             [0 .. nf' - 1]
+                      PVP_OUTPUT_NONSPIKING_ACT (PVPDimension nx' ny' nf') zs ->
+                        let !arr = R.fromListUnboxed (Z :. ny' :. nx' :. nf') zs
+                        in L.map
+                             (\ind ->
+                                 let !vec1 =
+                                       VU.filter (/= 0) . toUnboxed . computeS $
+                                       R.slice arr (Z :. All :. All :. ind)
+                                 in (0, vec1))
                              [0 .. nf' - 1]
                       _ ->
                         error
