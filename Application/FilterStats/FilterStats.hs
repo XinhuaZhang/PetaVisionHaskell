@@ -23,13 +23,15 @@ meanVar (_, vec) = (mu, sigma)
     !sigma =
       (VU.sum . VU.map (\x -> (x - mu) ^ (2 :: Int)) $ vec) / fromIntegral len
 
-plotHist :: (Int, VU.Vector Double)
-         -> (Double, Double)
-         -> Int
-         -> String
-         -> FilePath
-         -> IO ()
-plotHist (_, vec) (a, b) nbins title filePath =
+plotHist
+  :: Bool
+  -> (Int, VU.Vector Double)
+  -> (Double, Double)
+  -> Int
+  -> String
+  -> FilePath
+  -> IO ()
+plotHist plotZero (nz, vec) (a, b) nbins title filePath =
   toFile def filePath $
   do layout_title .= title
      plot (line "Histogram" [VU.toList . VU.zip indexVec $ normalizedHist])
@@ -43,6 +45,9 @@ plotHist (_, vec) (a, b) nbins title filePath =
     !hist =
       VU.accumulate (+) (VU.replicate nbins 0) . VU.zip eleIndexVec $
       VU.replicate (VU.length eleIndexVec) (1 :: Int)
-    !s = VU.sum hist
+    !hist1 = if plotZero
+                then VU.accum (+) hist [(0,nz)]
+                else hist
+    !s = VU.sum hist1
     !normalizedHist =
-      VU.map (\x -> fromIntegral x / fromIntegral s) hist :: VU.Vector Double
+      VU.map (\x -> fromIntegral x / fromIntegral s) hist1 :: VU.Vector Double

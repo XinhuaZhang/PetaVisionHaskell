@@ -12,13 +12,14 @@ import           System.Environment
 
 main = do
   (inputFile:_) <- getArgs
-  xs <- runResourceT (sourceFile inputFile $$ featureConduit =$= CL.consume)
+  xs <- runResourceT (sourceFile inputFile $$ featureConduit =$= CL.take 2)
   M.zipWithM_
     (\x i ->
         plotHist
+          True
           x
           (valueRange x)
-          100
+          1000
           (show i P.++ " " P.++ show (meanVar x))
           (show i P.++ ".png"))
     xs

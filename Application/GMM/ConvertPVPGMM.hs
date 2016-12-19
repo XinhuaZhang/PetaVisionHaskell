@@ -11,7 +11,7 @@ import           System.Environment
 import           System.IO
 
 main = do
-  let parallelParams = ParallelParams 16 10000
+  let parallelParams = ParallelParams 4 10000
   filePathList <- getArgs
   withBinaryFile
     (L.head filePathList)

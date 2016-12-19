@@ -45,7 +45,7 @@ unpooledSparse2NonsparseConduit parallelParams ind = do
                            R.slice arr (Z :. All :. All :. ind)
                       PVP_OUTPUT_NONSPIKING_ACT (PVPDimension nx' ny' nf') zs ->
                         let !arr = R.fromListUnboxed (Z :. ny' :. nx' :. nf') zs
-                        in toUnboxed . computeS $
+                        in VU.filter (/= 0) . toUnboxed . computeS $
                            R.slice arr (Z :. All :. All :. ind)
                       _ ->
                         error
@@ -80,12 +80,13 @@ unpooledSparse2NonsparseImageConduit parallelParams = do
                              [0 .. nf' - 1]
                       PVP_OUTPUT_NONSPIKING_ACT (PVPDimension nx' ny' nf') zs ->
                         let !arr = R.fromListUnboxed (Z :. ny' :. nx' :. nf') zs
+                            !totalNumEle = nx' * ny' * nf'
                         in L.map
                              (\ind ->
                                  let !vec1 =
                                        VU.filter (/= 0) . toUnboxed . computeS $
                                        R.slice arr (Z :. All :. All :. ind)
-                                 in (0, vec1))
+                                 in (totalNumEle - VU.length vec1, vec1))
                              [0 .. nf' - 1]
                       _ ->
                         error
