@@ -12,3 +12,12 @@ TAGS
 *.pvp
 Application/PVPAnalysis/main
 *.out
+*.dat
+/Application/GMM/plotWeight
+/Application/GMM/run
+/Application/GMM/runPlot
+/Application/GMM/trainGMM
+Application/GMM/Weight
+/Application/GMM/PlotWeight.hs
+*.png
+*.bin

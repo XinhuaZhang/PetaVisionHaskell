@@ -1,34 +1,40 @@
-{-# LANGUAGE BangPatterns  #-}
 {-# LANGUAGE DeriveGeneric #-}
 module Application.GMM.Gaussian where
 
-import           Application.GMM.Representation
+import           Control.DeepSeq
 import           Data.Binary
 import           GHC.Generics
+import           System.Random
 
--- sigma is a diagonal matrix
-data Gaussian =
-  Gaussian {numDims :: Int
-           ,mu      :: DataVec Double
-           ,sigma   :: DataVec Double}
-  deriving (Show,Generic)
+data Gaussian = Gaussian
+  { gaussianMu    :: !Double
+  , gaussianSigma :: !Double
+  } deriving (Generic)
+  
+instance Show Gaussian where
+  show (Gaussian mu sigma) = "Mu: " ++ show mu ++ " Sigma: " ++ show sigma
 
 instance Binary Gaussian where
-  put (Gaussian numDims' mu' sigma') =
-    do put numDims'
-       put mu'
-       put sigma'
-  get =
-    do numDims' <- get
-       mu' <- get
-       sigma' <- get
-       return (Gaussian numDims' mu' sigma')
+  put (Gaussian mu' sigma') = do
+    put mu'
+    put sigma'
+  get = do
+    mu' <- get
+    sigma' <- get
+    return (Gaussian mu' sigma')
+    
+instance NFData Gaussian where
+  rnf (Gaussian x y) = x `seq` y `seq` ()
 
-{-!x = (2 * pi) ** (0.5 * (fromIntegral numDims'))-}
-gaussian
-  :: Gaussian -> DataVec Double -> Double
-gaussian (Gaussian numDims' mu' sigma') xs = result
-  where !y = productVec sigma'
-        !z = (-0.5) * (sumVec $ powVec 2 ((mu' - xs) / sigma'))
-        !a = (2*pi) ** (0.5 * (fromIntegral $ lengthVec mu'))
-        !result = (exp z) / (y)
+{-# INLINE gaussian #-}
+gaussian :: Gaussian -> Double -> Double
+gaussian (Gaussian mu' sigma') x =
+  exp (-((x - mu') ^ (2 :: Int)) / (2 * sigma')) / sqrt (2 * pi * sigma')
+
+{-# INLINE randomGaussian #-}
+randomGaussian
+  :: ((Double,Double),(Double,Double)) -> IO Gaussian
+randomGaussian (boundMu,boundSigma) =
+  do mu <- randomRIO boundMu
+     sigma <- randomRIO boundSigma
+     return $! Gaussian mu sigma

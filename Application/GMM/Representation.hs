@@ -13,7 +13,8 @@ module Application.GMM.Representation
   ,lengthVec
   ,powVec
   ,addFoldVec
-  ,scalarMulVec)
+  ,scalarMulVec
+  ,scalarAddVec)
   where
 
 import           Control.DeepSeq     as DS
@@ -62,11 +63,24 @@ instance (Num a
   (+) = merge (+)
   (-) s1@(SparseVec _ _) d2@(DenseVec _) = merge (+) s1 $ mapVec negate d2
   (-) x y = merge (-) x y
-  (*) x@ (SparseVec _ _) y @ (SparseVec _ _) = merge (*) (sparse2Dense x) (sparse2Dense y)
-  (*) x@ (SparseVec _ _) y @ (DenseVec _) = merge (*) (sparse2Dense x) y
-  (*) x@ (DenseVec _) y @ (SparseVec _ _) = merge (*) x (sparse2Dense y)
+  (*) x@(SparseVec _ _) y@(SparseVec _ _) =
+    merge (*)
+          (sparse2Dense x)
+          (sparse2Dense y)
+  (*) x@(SparseVec n xs) y@(DenseVec vec) =
+    DenseVec .
+    VU.accumulate (+)
+                  (VU.replicate n 0) .
+    VU.map (\(i,v) -> (i,v * (vec VU.! i))) . VU.fromList $
+    xs
+  (*) x@(DenseVec vec) y@(SparseVec n xs) =
+    DenseVec .
+    VU.accumulate (+)
+                  (VU.replicate n 0) .
+    VU.map (\(i,v) -> (i,v * (vec VU.! i))) . VU.fromList $
+    xs
   (*) x y = merge (*) x y
-  negate = mapVec negate 
+  negate = mapVec negate
   abs = mapVec abs
   signum = mapVec signum
   fromInteger = error "fromInteger: doesn't support DataVec."
@@ -224,3 +238,12 @@ scalarMulVec :: (Num a
                 ,NFData a)
                 => a -> DataVec a -> DataVec a
 scalarMulVec x ys = mapVec (* x) ys
+
+scalarAddVec :: (Num a
+                ,Unbox a
+                ,NFData a)
+                => a -> DataVec a -> DataVec a
+scalarAddVec x (DenseVec vec) = DenseVec $ VU.map (+ x) vec
+scalarAddVec x y@(SparseVec _ _) =
+  scalarAddVec x
+               (sparse2Dense y)
