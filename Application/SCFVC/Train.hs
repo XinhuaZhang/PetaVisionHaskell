@@ -3,6 +3,7 @@ module Main where
 import           Application.SCFVC.ArgsParser   as Parser
 import           Application.SCFVC.FisherVector
 import           Classifier.LibLinear
+import           Control.Monad.IO.Class
 import           Data.Conduit
 import           Data.Conduit.List              as CL
 import           Data.List                      as L
@@ -45,7 +46,7 @@ main = do
         TrainParams
         { trainSolver = L2R_L2LOSS_SVC_DUAL
         , trainC = c params
-        , trainNumExamples = nBands header
+        , trainNumExamples = nBands actHeader
         , trainFeatureIndexMax =
           nf errorHeader * nf actHeader *
           if poolingFlag params

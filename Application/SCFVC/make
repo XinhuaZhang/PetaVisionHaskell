@@ -1,0 +1,9 @@
+#!/bin/bash
+
+export OMP_NUM_THREADS=10
+FLAG="--make -O2 -rtsopts -j4 -threaded -i../../" #-funbox-strict-fields
+LIBS="-lgomp -lstdc++ -lblas -L/usr/local/cuda-7.5/lib64/stubs"
+OBJPATH="../../Classifier/LibLinear/"
+
+ghc $FLAG $LIBS  $OBJPATH/linear.o $OBJPATH/tron.o Train.hs -o train
+ghc $FLAG $LIBS  $OBJPATH/linear.o $OBJPATH/tron.o Predict.hs -o predict
