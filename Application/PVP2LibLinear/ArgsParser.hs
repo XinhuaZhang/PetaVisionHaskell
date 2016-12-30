@@ -87,6 +87,10 @@ options =
           ["poolingSize"]
           (ReqArg (\x -> PoolingSize $ readInt x) "INT")
           "Set pooling size (Defaule 3)."]
+  ,Option ['m']
+          ["modelName"]
+          (ReqArg ModelName "FILE")
+          "model name"
 
 
 readInt :: String -> Int

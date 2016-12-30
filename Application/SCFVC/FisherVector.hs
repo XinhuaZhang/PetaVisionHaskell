@@ -14,18 +14,29 @@ import           PetaVision.Utility.Parallel
 
 fisherVectorConduit :: ParallelParams -> Bool
                     -> Conduit (PVPOutputData, PVPOutputData) IO (VU.Vector Double)
-fisherVectorConduit parallelParams poolFlag = do
-  xs <- CL.take (batchSize parallelParams)
-  unless
-    (L.null xs)
-    (do let func1 = uncurry fisherVector . join (***) pvpOutputData2Array
-            func2 =
-              if poolFlag
-                then toUnboxed . foldS (+) 0 . foldS (+) 0 . func1
-                else toUnboxed . computeS . func1
-            !ys = parMapChunk parallelParams rdeepseq func2 xs
-        sourceList ys
-        fisherVectorConduit parallelParams poolFlag)
+fisherVectorConduit parallelParams poolFlag =
+  do xs <- CL.take (batchSize parallelParams)
+     unless (L.null xs)
+            (do let func1 =
+                      uncurry fisherVector . join (***) pvpOutputData2Array
+                    func2 =
+                      if poolFlag
+                         then toUnboxed . foldS (+) 0 . foldS (+) 0 . func1
+                         else toUnboxed . computeS . func1
+                    !ys =
+                      parMapChunk
+                        parallelParams
+                        rdeepseq
+                        (\x ->
+                           let !vec = func2 x
+                               !powerVec =
+                                 VU.map (\y -> signum y * ((abs y) ** 0.5)) vec
+                               !l2norm =
+                                 sqrt . VU.sum . VU.map (^ 2) $ powerVec
+                           in VU.map (/ l2norm) powerVec)
+                        xs
+                sourceList ys
+                fisherVectorConduit parallelParams poolFlag)
 
 fisherVector :: Array U DIM3 Double -> Array U DIM3 Double -> Array D DIM3 Double
 fisherVector act err =

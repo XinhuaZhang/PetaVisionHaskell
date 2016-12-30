@@ -20,6 +20,7 @@ main =
         then error "run with --help to see options."
         else return ()
      params <- parseArgs args
+     print params
      header <- M.mapM readPVPHeader (pvpFile params)
      let source = P.map pvpFileSource (pvpFile params)
          nbands = (nBands $ P.head header)
