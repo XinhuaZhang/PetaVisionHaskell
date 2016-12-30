@@ -28,7 +28,7 @@ data Params = Params
   , poolingType :: PoolingType
   , batchSize   :: Int
   , poolingSize :: Int
-  }
+  } deriving (Show)
 
 options :: [OptDescr Flag]
 options =
@@ -69,6 +69,7 @@ options =
       ["poolingSize"]
       (ReqArg (\x -> PoolingSize $ readInt x) "INT")
       "Set pooling size (Defaule 3)."
+  ,  Option ['m'] ["modelName"] (ReqArg ModelName "FILE") "SVM model name"
   ]
 
 readInt :: String -> Int

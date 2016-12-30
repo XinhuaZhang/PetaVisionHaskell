@@ -12,7 +12,6 @@ import           Classifier.LibLinear.Example
 import           Classifier.LibLinear.Interface
 import           Control.Monad                  as M
 import           Control.Monad.IO.Class
-import qualified Control.Monad.Parallel         as MP
 import           Data.Conduit
 import           Data.Conduit.List              as CL
 import           Data.List                      as L
@@ -46,7 +45,7 @@ trainSink params filePath batchSize = do
                   (sqrt . VU.foldl' (\a b -> a + b ^ (2 :: Int)) 0 . snd . VU.unzip)
                   xs
               ys = P.zipWith (\x n -> VU.map (\(i, v) -> (i, v / n)) x) xs norm
-          featurePtr <- liftIO $ MP.mapM (getFeaturePtr . VU.toList) ys
+          featurePtr <- liftIO $ P.mapM (getFeaturePtr . VU.toList) ys
           go $ featurePtr : ptrs
         else return ptrs
 

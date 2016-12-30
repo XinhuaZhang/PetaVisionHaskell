@@ -2,9 +2,9 @@
 
 export OMP_NUM_THREADS=64
 FLAG="--make -O2 -rtsopts -j4 -threaded " #-funbox-strict-fields
-LIBS="-lgomp -lstdc++ -lblas -L/usr/local/cuda-7.5/lib64/stubs"
+LIBS="-lgomp -lstdc++ -lblas"
 OBJPATH="../../Classifier/LibLinear/"
 
 
-ghc $FLAG $LIBS -i../../ $OBJPATH/linear.o $OBJPATH/tron.o Train.hs -o train
-ghc $FLAG $LIBS -i../../ $OBJPATH/linear.o $OBJPATH/tron.o Test.hs -o test
+cabal exec -- ghc $FLAG $LIBS -i../../ $OBJPATH/linear.o $OBJPATH/tron.o Train.hs -o train
+cabal exec -- ghc $FLAG $LIBS -i../../ $OBJPATH/linear.o $OBJPATH/tron.o Test.hs -o test
