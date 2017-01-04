@@ -42,8 +42,7 @@ options =
       ["pvpfile"]
       (ReqArg PVPFile "FILE")
       "PVPFile (For concatenation, -i file1_batch1 file1_batch2 ... -i file2_batch1 file2_batch2 ...)"
-  , Option ['l'] ["txtLabel"] (ReqArg LabelFile "FILE") "Input txt label file"
-  , Option ['l'] ["pvpLabel"] (ReqArg LabelFile "FILE") "Input pvp label file"
+  , Option ['l'] ["Label"] (ReqArg LabelFile "FILE") "Input either pvp or txt label file"
   , Option
       ['c']
       ["constrainC"]
