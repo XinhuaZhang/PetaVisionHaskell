@@ -41,7 +41,7 @@ options =
       ['i']
       ["pvpfile"]
       (ReqArg PVPFile "FILE")
-      "PVPFile (For concatenation, -i file1_batch1 file1_batch2 ... -i file2_batch1 file2_batch2 ...)"
+      "PVPFile (For concatenation, -i \"file1_batch1 file1_batch2\" ... -i \"file2_batch1 file2_batch2\" ...) colon is necessary."
   , Option ['l'] ["Label"] (ReqArg LabelFile "FILE") "Input either pvp or txt label file"
   , Option
       ['c']
@@ -103,7 +103,7 @@ parseFlag flags = go flags defaultFlag
   where
     defaultFlag =
       Params
-      { pvpFile = [[]]
+      { pvpFile = []
       , labelFile = []
       , c = 1.0
       , numThread = 1
@@ -127,7 +127,7 @@ parseFlag flags = go flags defaultFlag
           go
             xs
             (params
-             { labelFile = splitStringbySpace str
+             { labelFile = splitStringbySpace str 
              })
         Thread n ->
           go

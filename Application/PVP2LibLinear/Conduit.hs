@@ -51,19 +51,21 @@ getFeaturePtr xs = newArray (pairs P.++ [C'feature_node (-1) 0])
 
 trainSink :: TrainParams
           -> [FilePath]
-          -> Int
+          -> Int -> Bool
           -> Sink (VU.Vector (Int, Double)) IO ()
-trainSink params filePath batchSize = do
+trainSink params filePath batchSize findCFlag = do
   label <-
     liftIO .
-    fmap L.concat .
+    fmap (L.concat . L.transpose) . 
     M.mapM
       (if L.isSuffixOf ".pvp" . L.head $ filePath
          then readPVPLabelFile
          else readLabelFile) $
     filePath
   featurePtr <- go []
-  liftIO $ train params label (L.concat . L.reverse $ featurePtr)
+  liftIO $ if findCFlag
+              then findParameterC params label (L.concat . L.reverse $ featurePtr)
+              else train params label (L.concat . L.reverse $ featurePtr)
   where
     go ptrs = do
       xs <- CL.take batchSize
