@@ -1,7 +1,10 @@
 module Application.PVP2LibLinear.ArgsParser where
 
+import           Data.Maybe
 import           PetaVision.Data.Pooling
 import           System.Console.GetOpt
+import           Text.Parsec
+import           Text.Parsec.String
 import           Text.Read
 
 data Flag
@@ -18,7 +21,9 @@ data Flag
   deriving (Show)
 
 data Params = Params
-  { pvpFile     :: [String]
+  { pvpFile     :: [[String]]  -- The inner-list is the same pvpFile
+                               -- from different batches; the
+                               -- outter-list is different pvpFile
   , labelFile   :: String
   , c           :: Double
   , numThread   :: Int
@@ -36,17 +41,18 @@ options =
       ['i']
       ["pvpfile"]
       (ReqArg PVPFile "FILE")
-      "PVPFile (For concatenation, -i file1 -i file2 ...)"
-  , Option ['l'] ["label"] (ReqArg LabelFile "FILE") "Input label file"
+      "PVPFile (For concatenation, -i file1_batch1 file1_batch2 ... -i file2_batch1 file2_batch2 ...)"
+  , Option ['l'] ["txtLabel"] (ReqArg LabelFile "FILE") "Input txt label file"
+  , Option ['l'] ["pvpLabel"] (ReqArg LabelFile "FILE") "Input pvp label file"
   , Option
       ['c']
       ["constrainC"]
-      (ReqArg (\x -> C $ readDouble x) "Double")
+      (ReqArg (C . readDouble) "Double")
       "Set the liblinear parameter c (Default 1)"
   , Option
       ['t']
       ["thread"]
-      (ReqArg (\x -> Thread $ readInt x) "INT")
+      (ReqArg (Thread . readInt) "INT")
       "Set the number of threads as x (\"+RTS -Nx\" should be added at the end of the command)"
   , Option
       ['C']
@@ -62,27 +68,27 @@ options =
   , Option
       ['b']
       ["batchSize"]
-      (ReqArg (\x -> BatchSize $ readInt x) "INT")
+      (ReqArg (BatchSize . readInt) "INT")
       "Set the batchSize."
   , Option
       ['s']
       ["poolingSize"]
-      (ReqArg (\x -> PoolingSize $ readInt x) "INT")
+      (ReqArg (PoolingSize . readInt) "INT")
       "Set pooling size (Defaule 3)."
-  ,  Option ['m'] ["modelName"] (ReqArg ModelName "FILE") "SVM model name"
+  , Option ['m'] ["modelName"] (ReqArg ModelName "FILE") "SVM model name"
   ]
 
 readInt :: String -> Int
 readInt str =
-  case (readMaybe str :: Maybe Int) of
-    Nothing -> error $ "\nRead integer error: " ++ str
-    Just x  -> x
+  fromMaybe
+    (error $ "\nRead integer error: " ++ str)
+    (readMaybe str :: Maybe Int)
 
 readDouble :: String -> Double
 readDouble str =
-  case (readMaybe str :: Maybe Double) of
-    Nothing -> error $ "\nRead double error: " ++ str
-    Just x  -> x
+  fromMaybe
+    (error $ "\nRead double error: " ++ str)
+    (readMaybe str :: Maybe Double)
 
 compilerOpts :: [String] -> IO [Flag]
 compilerOpts argv =
@@ -98,7 +104,7 @@ parseFlag flags = go flags defaultFlag
   where
     defaultFlag =
       Params
-      { pvpFile = []
+      { pvpFile = [[]]
       , labelFile = ""
       , c = 1.0
       , numThread = 1
@@ -116,7 +122,7 @@ parseFlag flags = go flags defaultFlag
           go
             xs
             (params
-             { pvpFile = str : (pvpFile params)
+             { pvpFile = splitStringbySpace str : pvpFile params
              })
         LabelFile str ->
           go
@@ -160,11 +166,11 @@ parseFlag flags = go flags defaultFlag
             (params
              { poolingType = read str :: PoolingType
              })
-        BatchSize x ->
+        BatchSize x' ->
           go
             xs
             (params
-             { batchSize = x
+             { batchSize = x'
              })
         PoolingSize n ->
           go
@@ -177,3 +183,19 @@ parseArgs :: [String] -> IO Params
 parseArgs args = do
   flags <- compilerOpts args
   return $ parseFlag flags
+
+spaceParser :: Parser [String]
+spaceParser = do
+  spaces
+  x <- many (noneOf [' '])
+  if null x
+    then return []
+    else do
+      xs <- spaceParser
+      return $! x : xs
+
+splitStringbySpace :: String -> [String]
+splitStringbySpace xs =
+  case parse spaceParser "" xs of
+    Left err -> error $ show err
+    Right ys -> ys
