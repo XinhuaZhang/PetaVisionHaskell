@@ -7,8 +7,9 @@ import           Classifier.LibLinear
 import           Control.Monad                        as M
 import           Data.Conduit
 import           Data.Conduit.List                    as CL
-import           PetaVision.PVPFile.IO
+import           Data.List                            as L
 import           PetaVision.Data.Pooling
+import           PetaVision.PVPFile.IO
 import           PetaVision.Utility.Parallel          as PA
 import           Prelude                              as P
 import           System.Environment
@@ -49,10 +50,20 @@ main = do
            (snd . unzip $ dims)) $$
         concatPooledConduit =$
         predictConduit =$=
-        mergeSource (labelSource $ labelFile params) =$=
+        mergeSource
+          (sequenceSources
+             (if L.isSuffixOf ".pvp" . L.head . labelFile $ params
+                then (P.map pvpLabelSource $ labelFile params)
+                else (P.map labelSource $ labelFile params)) =$=
+           CL.concat) =$=
         predict (modelName params) "result.txt"
     else sequenceSources source $$ CL.concat =$=
          concatConduit (snd . unzip $ dims) =$=
          predictConduit =$=
-         mergeSource (labelSource $ labelFile params) =$=
+         mergeSource
+           (sequenceSources
+              (if L.isSuffixOf ".pvp" . L.head . labelFile $ params
+                 then (P.map pvpLabelSource $ labelFile params)
+                 else (P.map labelSource $ labelFile params)) =$=
+            CL.concat) =$=
          predict (modelName params) "result.txt"

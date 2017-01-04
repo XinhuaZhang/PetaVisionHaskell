@@ -24,7 +24,7 @@ data Params = Params
   { pvpFile     :: [[String]]  -- The inner-list is the same pvpFile
                                -- from different batches; the
                                -- outter-list is different pvpFile
-  , labelFile   :: String
+  , labelFile   :: [String]    -- A list of label files from different batches
   , c           :: Double
   , numThread   :: Int
   , modelName   :: String
@@ -105,7 +105,7 @@ parseFlag flags = go flags defaultFlag
     defaultFlag =
       Params
       { pvpFile = [[]]
-      , labelFile = ""
+      , labelFile = []
       , c = 1.0
       , numThread = 1
       , modelName = "model"
@@ -128,7 +128,7 @@ parseFlag flags = go flags defaultFlag
           go
             xs
             (params
-             { labelFile = str
+             { labelFile = splitStringbySpace str
              })
         Thread n ->
           go

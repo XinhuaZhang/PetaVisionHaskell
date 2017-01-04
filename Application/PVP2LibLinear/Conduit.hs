@@ -5,6 +5,7 @@ module Application.PVP2LibLinear.Conduit
   , concatConduit
   , predictConduit
   , concatPooledConduit
+  , pvpLabelSource
   ) where
 
 import           Classifier.LibLinear.Bindings
@@ -21,6 +22,33 @@ import           Foreign.Ptr
 import           PetaVision.PVPFile.IO
 import           Prelude                        as P
 
+-- Assume that it is 1x1xnf
+readPVPLabelFile :: FilePath -> IO [Double]
+readPVPLabelFile filePath = do
+  labels <- pvpFileSource filePath $$ CL.consume
+  return .
+    P.map
+      (\x ->
+          case x of
+            PVP_OUTPUT_ACT _ ys ->
+              case L.elemIndex 1 ys of
+                Nothing -> error "readPVPLabelFile: read label error."
+                Just y -> fromIntegral y
+            _ -> error "readPVPLabelFile: file format is supported.") $
+    labels
+    
+pvpLabelSource :: FilePath -> Source IO Double
+pvpLabelSource filePath =
+  pvpFileSource filePath =$=
+  CL.map
+    (\x ->
+        case x of
+          PVP_OUTPUT_ACT _ ys ->
+            case L.elemIndex 1 ys of
+              Nothing -> error "readPVPLabelFile: read label error."
+              Just y -> fromIntegral y
+          _ -> error "readPVPLabelFile: file format is supported.")
+
 getFeaturePtr :: [(Int, Double)] -> IO (Ptr C'feature_node)
 getFeaturePtr xs = newArray (pairs P.++ [C'feature_node (-1) 0])
   where
@@ -28,11 +56,18 @@ getFeaturePtr xs = newArray (pairs P.++ [C'feature_node (-1) 0])
       P.map (\(i, x) -> C'feature_node (P.fromIntegral i) (realToFrac x)) xs
 
 trainSink :: TrainParams
-          -> FilePath
+          -> [FilePath]
           -> Int
           -> Sink (VU.Vector (Int, Double)) IO ()
 trainSink params filePath batchSize = do
-  label <- liftIO $ readLabelFile filePath
+  label <-
+    liftIO .
+    fmap L.concat .
+    M.mapM
+      (if L.isSuffixOf ".pvp" . L.head $ filePath
+         then readPVPLabelFile
+         else readLabelFile) $
+    filePath
   featurePtr <- go []
   liftIO $ train params label (L.concat . L.reverse $ featurePtr)
   where
