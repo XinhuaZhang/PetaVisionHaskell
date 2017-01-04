@@ -30,10 +30,7 @@ readPVPLabelFile filePath = do
     P.map
       (\x ->
           case x of
-            PVP_OUTPUT_ACT _ ys ->
-              case L.elemIndex 1 ys of
-                Nothing -> error "readPVPLabelFile: read label error."
-                Just y -> fromIntegral y
+            PVP_OUTPUT_ACT_SPARSEVALUES _ ys -> fromIntegral . fst . VU.head $ ys
             _ -> error "readPVPLabelFile: file format is supported.") $
     labels
     
@@ -43,10 +40,7 @@ pvpLabelSource filePath =
   CL.map
     (\x ->
         case x of
-          PVP_OUTPUT_ACT _ ys ->
-            case L.elemIndex 1 ys of
-              Nothing -> error "readPVPLabelFile: read label error."
-              Just y -> fromIntegral y
+          PVP_OUTPUT_ACT_SPARSEVALUES _ ys -> fromIntegral . fst . VU.head $ ys
           _ -> error "readPVPLabelFile: file format is supported.")
 
 getFeaturePtr :: [(Int, Double)] -> IO (Ptr C'feature_node)
