@@ -24,7 +24,7 @@ main = do
         ParallelParams (Parser.numThread params) (Parser.batchSize params)
   print params
   runResourceT
-    (sourceFile (P.head $ pvpFile params) $$ featureConduit =$=
+    (pvpFileSource (P.head $ pvpFile params) $$ featureConduit parallelParams =$=
      gmmSink
        parallelParams
        (gmmFile params)

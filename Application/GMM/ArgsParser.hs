@@ -2,11 +2,9 @@
 
 module Application.GMM.ArgsParser where
 
-import           Data.List               as L
 import           Data.Maybe
 import           PetaVision.Data.Pooling
 import           System.Console.GetOpt
-import           System.Environment
 import           Text.Read
 
 data Flag
@@ -19,30 +17,26 @@ data Flag
   | Pool
   | PoolingType String
   | BatchSize Int
-  | GPUId [Int]
   | PoolingSize Int
-  | GPUPooling
   | NumGaussian Int
   | GMMFile String
   | Threshold Double
   deriving (Show)
 
 data Params =
-  Params {pvpFile        :: [String]
-         ,labelFile      :: String
-         ,c              :: Double
-         ,numThread      :: Int
-         ,modelName      :: String
-         ,findC          :: Bool
-         ,poolingFlag    :: Bool
-         ,poolingType    :: PoolingType
-         ,batchSize      :: Int
-         ,gpuId          :: [Int]
-         ,poolingSize    :: Int
-         ,gpuPoolingFlag :: Bool
-         ,numGaussian    :: Int
-         ,gmmFile        :: String
-         ,threshold      :: Double}
+  Params {pvpFile     :: [String]
+         ,labelFile   :: String
+         ,c           :: Double
+         ,numThread   :: Int
+         ,modelName   :: String
+         ,findC       :: Bool
+         ,poolingFlag :: Bool
+         ,poolingType :: PoolingType
+         ,batchSize   :: Int
+         ,poolingSize :: Int
+         ,numGaussian :: Int
+         ,gmmFile     :: String
+         ,threshold   :: Double}
   deriving (Show)
 
 options :: [OptDescr Flag]
@@ -79,21 +73,6 @@ options =
           ["batchSize"]
           (ReqArg (\x -> BatchSize $ readInt x) "INT")
           "Set the batchSize."
-  ,Option ['d']
-          ["gpuId"]
-          (ReqArg (\x ->
-                     let go [] = []
-                         go (y:ys) =
-                           if y == ','
-                              then go ys
-                              else [y] : go ys
-                     in GPUId $ map readInt $ go x)
-                  "[INT]")
-          "Set GPU ID"
-  ,Option ['g']
-          ["gpuPooling"]
-          (NoArg GPUPooling)
-          "Whether or not using GPU for pooling."
   ,Option ['s']
           ["poolingSize"]
           (ReqArg (\x -> PoolingSize $ readInt x) "INT")
@@ -143,8 +122,6 @@ parseFlag flags = go flags defaultFlag
                  ,poolingFlag = False
                  ,poolingType = Avg
                  ,batchSize = 1
-                 ,gpuId = [0]
-                 ,gpuPoolingFlag = False
                  ,poolingSize = 3
                  ,numGaussian = 1
                  ,gmmFile = "gmm.dat"
@@ -162,8 +139,6 @@ parseFlag flags = go flags defaultFlag
             PoolingType str ->
               go xs (params {poolingType = read str :: PoolingType})
             BatchSize x -> go xs (params {batchSize = x})
-            GPUId x -> go xs (params {gpuId = x})
-            GPUPooling -> go xs (params {gpuPoolingFlag = True})
             PoolingSize n -> go xs (params {poolingSize = n})
             NumGaussian n -> go xs (params {numGaussian = n})
             GMMFile str -> go xs (params {gmmFile = str})

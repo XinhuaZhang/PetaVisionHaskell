@@ -1,24 +1,15 @@
 module PetaVision.Data.Pooling
-  (module CUDA.DataType
-  ,PoolingType(..)
-  ,poolAccConduit
-  ,poolConduit
-  ,poolVecConduit)
-  where
+  ( PoolingType(..)
+  , poolConduit
+  , poolVecConduit
+  ) where
 
 import           Control.DeepSeq
-import           Control.DeepSeq
 import           Control.Monad               as M
-import           Control.Monad.IO.Class      (liftIO)
-import           CUDA.DataType
-import           CUDA.MultiGPU
-import           Data.Array.Accelerate       as A
-import           Data.Array.Accelerate.CUDA  as A
 import           Data.Array.Unboxed          as Arr
 import           Data.Conduit
 import           Data.Conduit.List           as CL
 import           Data.List                   as L
-import           Data.Maybe                  as Maybe
 import           Data.Vector         as V
 import           Data.Vector.Unboxed         as VU
 import           GHC.Float
@@ -30,195 +21,6 @@ data PoolingType
   = Max
   | Avg
   deriving (Show,Read)
-
-sparse2NonsparseAcc :: (Elt a
-                       ,IsFloating a)
-                    => PVPDimension
-                    -> Acc (A.Vector (Int,a))
-                    -> Acc (A.Array DIM3 a)
-sparse2NonsparseAcc (PVPDimension nx ny nf) pairAcc =
-  A.reshape (A.lift (Z :. ny :. nx :. nf)) $ A.scatter ind d val
-  where (ind,val) = A.unzip pairAcc
-        size = nf * nx * ny
-        d =
-          A.generate (A.lift $ Z :. size)
-                     (\ix -> A.constant 0)
-
--- avgPoolAcc :: (Elt a
---               ,IsFloating a)
---            => Stencil3x5x5 a -> Exp a
--- avgPoolAcc (a,b,c,d,e) = ((g a + g b + g c + g d + g e) / (A.constant 25))
---   where f :: (Elt a
---              ,IsFloating a)
---           => (Stencil3 a) -> Exp a
---         f (x1,x2,x3) = x2
---         g (y1,y2,y3,y4,y5) = (f y1) + (f y2) + (f y3) + (f y4) + (f y5)
-avgPoolAcc :: (Elt a
-              ,IsFloating a)
-           => Stencil5x5x3 a -> Exp a
-avgPoolAcc (a,b,c) = (g b / (A.constant 25))
-  where f :: (Elt a
-             ,IsFloating a)
-          => (Stencil5 a) -> Exp a
-        f (x1,x2,x3,x4,x5) = x1 + x2 + x3 + x4 + x5
-        g (y1,y2,y3,y4,y5) = (f y1) + (f y2) + (f y3) + (f y4) + (f y5)
-
--- maxPoolAcc :: (Elt a
---               ,IsFloating a
---               ,IsScalar a)
---            => Stencil3x5x5 a -> Exp a
--- maxPoolAcc (a,b,c,d,e) = P.maximum [g a,g b,g c,g d,g e]
---   where f :: (Elt a
---              ,IsFloating a)
---           => (Stencil3 a) -> Exp a
---         f (x1,x2,x3) = x2
---         g (y1,y2,y3,y4,y5) = P.maximum [(f y1),(f y2),(f y3),(f y4),(f y5)]
-maxPoolAcc :: (Elt a
-              ,IsFloating a
-              ,IsScalar a)
-           => Stencil5x5x3 a -> Exp a
-maxPoolAcc (a,b,c) = g b
-  where f :: (Elt a
-             ,IsFloating a)
-          => (Stencil5 a) -> Exp a
-        f (x1,x2,x3,x4,x5) = P.maximum [x1,x2,x3,x4,x5]
-        g (y1,y2,y3,y4,y5) = P.maximum [(f y1),(f y2),(f y3),(f y4),(f y5)]
-
-poolAcc :: (Elt a
-           ,IsFloating a
-           ,IsScalar a)
-        => PoolingType -> Stencil5x5x3 a -> Exp a
-poolAcc Max = maxPoolAcc
-poolAcc Avg = avgPoolAcc
-
-poolAccConduit
-  :: GPUDataType
-  -> [A.Context]
-  -> PoolingType
-  -> Int
-  -> Int
-  -> Conduit PVPOutputData IO (VU.Vector (Int,Double))
-poolAccConduit GPUFloat ctx poolingType batchSize offset =
-  do xs <- M.replicateM batchSize await
-     let batch = Maybe.catMaybes xs
-     if P.length batch > 0
-        then do let (PVPDimension nx' ny' nf') =
-                      case P.head batch of
-                        PVP_OUTPUT_ACT _ _ ->
-                          error "Dosen't support pooling PVP_OUTPUT_ACT"
-                        PVP_OUTPUT_NONSPIKING_ACT d _ -> d
-                        PVP_OUTPUT_ACT_SPARSEVALUES d _ -> d
-                    indVec =
-                      A.generate
-                        (A.index1 $ A.constant (nx' * ny' * nf'))
-                        (\ix ->
-                           let (Z :. i) =
-                                 A.unlift ix :: ((A.:.) A.Z (A.Exp Int))
-                           in (i + 1 + A.constant offset) :: A.Exp Int)
-                    pooledData =
-                      case P.head batch of
-                        PVP_OUTPUT_ACT _ _ ->
-                          error "Dosen't support pooling PVP_OUTPUT_ACT"
-                        PVP_OUTPUT_NONSPIKING_ACT _ _ ->
-                          multiGPUStream
-                            ctx
-                            (stencil (poolAcc poolingType)
-                                     (Constant 0) >->
-                             A.flatten >->
-                             (A.zip indVec) >->
-                             (A.filter (\x ->
-                                          let (i,v) =
-                                                A.unlift x :: (A.Exp Int
-                                                              ,A.Exp Float)
-                                          in v A.>* (A.constant 0)))) $
-                          P.map (\(PVP_OUTPUT_NONSPIKING_ACT _ x) ->
-                                   A.fromList (Z :. ny' :. nx' :. nf') .
-                                   VU.toList . VU.map double2Float $
-                                   x)
-                                batch :: [A.Array DIM1 (Int,Float)]
-                        PVP_OUTPUT_ACT_SPARSEVALUES layout@(PVPDimension nx ny nf) _ ->
-                          multiGPUStream
-                            ctx
-                            (sparse2NonsparseAcc layout >->
-                             stencil (poolAcc poolingType)
-                                     (Constant 0) >->
-                             A.flatten >->
-                             (A.zip indVec) >->
-                             (A.filter (\x ->
-                                          let (i,v) =
-                                                A.unlift x :: (A.Exp Int
-                                                              ,A.Exp Float)
-                                          in v A.>* (A.constant 0)))) $
-                          P.map (\(PVP_OUTPUT_ACT_SPARSEVALUES _ xs) ->
-                                   A.fromList (Z :. VU.length xs) .
-                                   VU.toList .
-                                   VU.map (\(i,x) -> (i,double2Float x)) $
-                                   xs)
-                                batch :: [A.Vector (Int,Float)]
-                CL.sourceList $!!
-                  P.map (VU.fromList .
-                         (P.map (\(j,x) -> (j,float2Double x))) . A.toList)
-                        pooledData
-                poolAccConduit GPUFloat ctx poolingType batchSize offset
-        else return ()
-poolAccConduit GPUDouble ctx poolingType batchSize offset =
-  do xs <- M.replicateM batchSize await
-     let batch = Maybe.catMaybes xs
-     if P.length batch > 0
-        then do let (PVPDimension nx' ny' nf') =
-                      case P.head batch of
-                        PVP_OUTPUT_ACT _ _ ->
-                          error "Dosen't support pooling PVP_OUTPUT_ACT"
-                        PVP_OUTPUT_NONSPIKING_ACT d _ -> d
-                        PVP_OUTPUT_ACT_SPARSEVALUES d _ -> d
-                    indVec =
-                      A.generate
-                        (A.index1 $ A.constant (nx' * ny' * nf'))
-                        (\ix ->
-                           let (Z :. i) =
-                                 A.unlift ix :: ((A.:.) A.Z (A.Exp Int))
-                           in (i + 1 + A.constant offset) :: A.Exp Int)
-                    pooledData =
-                      case P.head batch of
-                        PVP_OUTPUT_ACT _ _ ->
-                          error "Dosen't support pooling PVP_OUTPUT_ACT"
-                        PVP_OUTPUT_NONSPIKING_ACT _ _ ->
-                          multiGPUStream
-                            ctx
-                            (stencil (poolAcc poolingType)
-                                     (Constant 0) >->
-                             A.flatten >->
-                             (A.zip indVec) >->
-                             (A.filter (\x ->
-                                          let (i,v) =
-                                                A.unlift x :: (A.Exp Int
-                                                              ,A.Exp Double)
-                                          in v A.>* (A.constant 0)))) $
-                          P.map (\(PVP_OUTPUT_NONSPIKING_ACT _ x) ->
-                                   A.fromList (Z :. ny' :. nx' :. nf') .
-                                   VU.toList $
-                                   x)
-                                batch :: [A.Array DIM1 (Int,Double)]
-                        PVP_OUTPUT_ACT_SPARSEVALUES layout _ ->
-                          multiGPUStream
-                            ctx
-                            (sparse2NonsparseAcc layout >->
-                             stencil (poolAcc poolingType)
-                                     (Constant 0) >->
-                             A.flatten >->
-                             (A.zip indVec) >->
-                             (A.filter (\x ->
-                                          let (i,v) =
-                                                A.unlift x :: (A.Exp Int
-                                                              ,A.Exp Double)
-                                          in v A.>* (A.constant 0)))) $
-                          P.map (\(PVP_OUTPUT_ACT_SPARSEVALUES _ xs) ->
-                                   A.fromList (Z :. VU.length xs) . VU.toList $
-                                   xs)
-                                batch :: [A.Vector (Int,Double)]
-                CL.sourceList $!! (P.map (VU.fromList . A.toList) pooledData)
-                poolAccConduit GPUDouble ctx poolingType batchSize offset
-        else return ()
 
 {- CPU Pooling -}
 sumPoolList

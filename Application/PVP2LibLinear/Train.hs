@@ -5,7 +5,6 @@ import           Application.PVP2LibLinear.Conduit
 import           Application.PVP2LibLinear.Utility
 import           Classifier.LibLinear
 import           Control.Monad                        as M
-import           CUDA.MultiGPU
 import           Data.Conduit
 import           Data.Conduit.List                    as CL
 import           PetaVision.PVPFile.IO
@@ -20,9 +19,17 @@ main =
         then error "run with --help to see options."
         else return ()
      params <- parseArgs args
-     header <- M.mapM readPVPHeader (pvpFile params)
-     let source = P.map pvpFileSource (pvpFile params)
-         nbands = (nBands $ P.head header)
+     print params
+     header <-
+       M.mapM (readPVPHeader . P.head)
+              (pvpFile params)
+     batchHeader <- M.mapM readPVPHeader . P.head . pvpFile $ params
+     let source =
+           P.map (\filePath ->
+                    (sequenceSources . P.map pvpFileSource $ filePath) =$=
+                    CL.concat)
+                 (pvpFile params)
+         nbands = P.sum . P.map nBands $ batchHeader
          dims = dimOffset header
          trainParams =
            TrainParams {trainSolver = L2R_L2LOSS_SVC_DUAL
@@ -31,50 +38,28 @@ main =
                        ,trainFeatureIndexMax =
                           (\((nf,ny,nx),n) -> n + nf * ny * nx) . P.last $ dims
                        ,trainModel = (modelName params)}
+     print trainParams
      if poolingFlag params
-        then do if gpuPoolingFlag params
-                   then do putStrLn $
-                             "Using GPU for " ++
-                             show (poolingType params) ++ " Pooling"
-                           ctx <- initializeGPUCtx (Option $ gpuId params)
-                           sequenceSources
-                             (P.zipWith3
-                                (\s h offset ->
-                                   s =$=
-                                   poolAccConduit GPUDouble
-                                                  ctx
-                                                  (poolingType params)
-                                                  (AP.batchSize params)
-                                                  offset)
-                                source
-                                header
-                                (snd . unzip $ dims)) $$
-                             concatPooledConduit =$
-                             trainSink trainParams
-                                       (labelFile params)
-                                       (AP.batchSize params)
-                           destoryGPUCtx ctx
-                   else do putStrLn $
-                             "Using CPU for " ++
-                             show (poolingType params) ++ " Pooling"
-                           sequenceSources
-                             (P.zipWith3
-                                (\s h offset ->
-                                   s =$=
-                                   poolVecConduit
-                                     (ParallelParams (AP.numThread params)
-                                                     (AP.batchSize params))
-                                     (poolingType params)
-                                     (poolingSize params)
-                                     offset)
-                                source
-                                header
-                                (snd . unzip $ dims)) $$
-                             concatPooledConduit =$
-                             trainSink trainParams
-                                       (labelFile params)
-                                       (AP.batchSize params)
+        then do putStrLn $
+                  "Using CPU for " ++ show (poolingType params) ++ " Pooling"
+                sequenceSources
+                  (P.zipWith (\s offset ->
+                                s =$=
+                                poolVecConduit
+                                  (ParallelParams (AP.numThread params)
+                                                  (AP.batchSize params))
+                                  (poolingType params)
+                                  (poolingSize params)
+                                  offset)
+                             source
+                             (snd . unzip $ dims)) $$
+                  concatPooledConduit =$
+                  trainSink trainParams
+                            (labelFile params)
+                            (AP.batchSize params)
+                            (findC params)
         else sequenceSources source $$ concatConduit (snd . unzip $ dims) =$
              trainSink trainParams
                        (labelFile params)
                        (AP.batchSize params)
+                       (findC params)
