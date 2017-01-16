@@ -1,7 +1,7 @@
 module Main where
 
 import           Application.GMM.ArgsParser   as Parser
-import           Application.GMM.ConvertPVPGMMConduit
+import           Application.GMM.Conduit
 import           Application.GMM.MixtureModel
 import           Application.GMM.FisherKernel
 import           Application.GMM.GMM
@@ -75,7 +75,7 @@ main =
                        ,trainModel = modelName params}
      print params
      pvpFileSource (P.head $ pvpFile params) $$
-       unpooledSparse2NonsparseImageConduit parallelParams =$=
+       featureConduit parallelParams =$=
        fisherVectorConduit parallelParams gmm =$=
        trainSink parallelParams
                  (labelFile params)
