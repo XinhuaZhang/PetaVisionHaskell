@@ -3,14 +3,15 @@
 module Application.SCFVC.FisherVector where
 
 import           Control.Arrow
-import           Control.Monad               as M
-import           Data.Array.Repa             as R
+import           Control.Monad                       as M
+import           Data.Array.Repa                     as R
 import           Data.Conduit
-import           Data.Conduit.List           as CL
-import           Data.List                   as L
-import           Data.Vector.Unboxed         as VU
+import           Data.Conduit.List                   as CL
+import           Data.List                           as L
+import           Data.Vector.Unboxed                 as VU
 import           PetaVision.PVPFile.IO
 import           PetaVision.Utility.Parallel
+import           PetaVision.Utility.RepaArrayUtility
 
 fisherVectorConduit :: ParallelParams -> Bool
                     -> Conduit (PVPOutputData, PVPOutputData) IO (VU.Vector Double)
@@ -40,14 +41,22 @@ fisherVectorConduit parallelParams poolFlag =
 
 fisherVector :: Array U DIM3 Double -> Array U DIM3 Double -> Array D DIM3 Double
 fisherVector act err =
-  traverse2
-    act
-    err
-    (\(Z :. _nyAct :. _nxAct :. nfAct) (Z :. nyErr :. nxErr :. nfErr) ->
-        (Z :. nfErr * nfAct :. nyErr :. nxErr)) $
+  traverse2 act
+            newErr
+            (\(Z :. _nyAct :. _nxAct :. nfAct) (Z :. nyErr :. nxErr :. nfErr) ->
+               (Z :. nfErr * nfAct :. nyErr :. nxErr)) $
   \fAct fErr (Z :. k :. j :. i) ->
-     let !kAct = k `div` nfErr'
-         !kErr = k `mod` nfErr'
-     in fAct (Z :. j :. i :. kAct) * fErr (Z :. j :. i :. kErr)
-  where
-    !(Z :. _nyErr' :. _nxErr' :. nfErr') = extent err
+    let !kAct = k `div` nfErr'
+        !kErr = k `mod` nfErr'
+    in fAct (Z :. j :. i :. kAct) * fErr (Z :. j :. i :. kErr)
+  where !(Z :. nyErr' :. nxErr' :. nfErr') = extent err
+        !(Z :. nyAct' :. nxAct' :. nfAct') = extent act
+        !newErr = downsample [1,factorX, factorY] err 
+        !factorY =
+          if nyErr' == nyAct'
+             then nyErr'
+             else div nyErr' nyAct'
+        !factorX =
+          if nxErr' == nxAct'
+             then nxErr'
+             else div nxErr' nxAct'
