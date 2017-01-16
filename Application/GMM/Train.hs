@@ -1,7 +1,7 @@
 module Main where
 
 import           Application.GMM.ArgsParser           as Parser
-import           Application.GMM.ConvertPVPGMMConduit
+import           Application.GMM.Conduit
 import           Application.GMM.GMM
 import           Control.Monad.Trans.Resource
 import           Data.Array.Repa                      as R
@@ -29,7 +29,6 @@ main = do
        parallelParams
        (gmmFile params)
        (numGaussian params)
-       192
-       ((0, 100), (1, 1000))
        (threshold params)
+       100
     )

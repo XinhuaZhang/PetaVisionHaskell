@@ -9,6 +9,7 @@ module PetaVision.PVPFile.IO
 import           Control.DeepSeq
 import           Control.Monad                 as M
 import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Resource
 import           Data.Array.Repa               as R
 import           Data.Binary.Get
 import qualified Data.ByteString               as BS
@@ -330,21 +331,25 @@ getFrame header h =
 
 
 pvpFileSource
-  :: FilePath -> C.Source IO PVPOutputData
-pvpFileSource filePath =
-  do h <- liftIO $ openBinaryFile filePath ReadMode
-     header <- liftIO $ getPVPHeader h
-     let fileType' = getPVPFileType header
-     h1 <-
-       if fileType' == PVP_WGT_FILE || fileType' == PVP_KERNEL_FILE
-          then do liftIO $ hClose h
-                  liftIO $ openBinaryFile filePath ReadMode
-          else return h
-     loop (nBands header) h1 header
-  where loop n handle header' =
-          do if n > 0
-                then do frame <- liftIO $ getFrame header' handle
-                        yield frame
-                        loop (n - 1) handle header'
-                else do liftIO $ hClose handle
-                        return ()
+  :: FilePath -> C.Source (ResourceT IO) PVPOutputData
+pvpFileSource filePath = do
+  h <- liftIO $ openBinaryFile filePath ReadMode
+  header <- liftIO $ getPVPHeader h
+  let fileType' = getPVPFileType header
+  h1 <-
+    if fileType' == PVP_WGT_FILE || fileType' == PVP_KERNEL_FILE
+      then do
+        liftIO $ hClose h
+        liftIO $ openBinaryFile filePath ReadMode
+      else return h
+  loop (nBands header) h1 header
+  where
+    loop n handle header' =
+      if n > 0
+        then do
+          frame <- liftIO $ getFrame header' handle
+          yield frame
+          loop (n - 1) handle header'
+        else do
+          liftIO $ hClose handle
+          return ()
