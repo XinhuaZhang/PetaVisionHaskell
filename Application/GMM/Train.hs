@@ -10,31 +10,33 @@ import           Data.Conduit.Binary          as CB
 import           Data.Conduit.List            as CL
 import           PetaVision.Data.Pooling
 import           PetaVision.PVPFile.IO
+import           PetaVision.Utility.Array
+import           PetaVision.Utility.Conduit
 import           PetaVision.Utility.Parallel
 import           Prelude                      as P
 import           System.Environment
 import           System.IO
 
-main =
-  do args <- getArgs
-     if null args
-        then error "run with --help to see options."
-        else return ()
-     params <- parseArgs args
-     let parallelParams =
-           ParallelParams (Parser.numThread params)
-                          (Parser.batchSize params)
-     print params
-     runResourceT
-       (pvpFileSource (P.head $ pvpFile params) $$
-        poolVecFeaturePointConduit
-          (ParallelParams (Parser.numThread params)
-                          (Parser.batchSize params))
-          (poolingType params)
-          (poolingSize params)
-          undefined =$=
-        gmmSink parallelParams
-                (gmmFile params)
-                (numGaussian params)
-                (threshold params)
-                100)
+main = do
+  args <- getArgs
+  if null args
+    then error "run with --help to see options."
+    else return ()
+  params <- parseArgs args
+  let parallelParams =
+        ParallelParams (Parser.numThread params) (Parser.batchSize params)
+  print params
+  runResourceT
+    (pvpFileSource (P.head $ pvpFile params) $$
+     poolArrayConduit
+       (ParallelParams (Parser.numThread params) (Parser.batchSize params))
+       (poolingType params)
+       (poolingSize params)
+       undefined =$=
+     mapP parallelParams extractFeaturePoint =$=
+     gmmSink
+       parallelParams
+       (gmmFile params)
+       (numGaussian params)
+       (threshold params)
+       100)

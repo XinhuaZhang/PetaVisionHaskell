@@ -1,8 +1,9 @@
+{-# LANGUAGE FlexibleContexts #-}
 module PetaVision.Data.Pooling
   ( PoolingType(..)
   , poolConduit
   , poolVecConduit
-  , poolVecFeaturePointConduit
+  , poolArrayConduit
   ) where
 
 import           Control.DeepSeq
@@ -335,54 +336,58 @@ poolVecConduit parallelParams poolingType poolingSize offset =
         else return ()
 
 
-poolVecFeaturePointConduit
+poolArrayConduit
   :: ParallelParams
   -> PoolingType
   -> Int
   -> Int
-  -> Conduit PVPOutputData (ResourceT IO) [VU.Vector Double]
-poolVecFeaturePointConduit parallelParams poolingType poolingSize offset =
-  do xs <- CL.take (batchSize parallelParams)
-     unless (L.null xs)
-            (do let pooledData =
-                      case P.head xs of
-                        PVP_OUTPUT_ACT _ _ ->
-                          error "Dosen't support pooling PVP_OUTPUT_ACT."
-                        PVP_OUTPUT_NONSPIKING_ACT _ _ ->
-                          parMapChunk
-                            parallelParams
-                            rdeepseq
-                            (\(PVP_OUTPUT_NONSPIKING_ACT (PVPDimension nx' ny' nf') x) ->
-                               let arr =
-                                     listArray ((0,0,0)
-                                               ,(ny' - 1,nx' - 1,nf' - 1)) .
-                                     VU.toList $
-                                     x
-                                   pooledList =
-                                     P.map (poolVec poolingType poolingSize .
-                                            extractScliceVec arr) $
-                                     [0 .. nf' - 1]
-                               in extractFeaturePoint nf' pooledList)
-                            xs
-                        PVP_OUTPUT_ACT_SPARSEVALUES _ _ ->
-                          parMapChunk
-                            parallelParams
-                            rdeepseq
-                            (\(PVP_OUTPUT_ACT_SPARSEVALUES layout@(PVPDimension _nx' _ny' nf') x) ->
-                               extractFeaturePoint nf' .
-                               P.map (poolVec poolingType poolingSize) .
-                               sparse2NonSparseVec layout . VU.toList $
-                               x)
-                            xs
-                        _ ->
-                          error "poolVecFeaturePointConduit: pvp file format is supported."
-                sourceList $!! pooledData
-                poolVecFeaturePointConduit parallelParams poolingType poolingSize offset)
-  where extractFeaturePoint nf' pooledList' =
-          let newNy = L.length . L.head $ pooledList'
-              newNx = VU.length . L.head . L.head $ pooledList'
-              pooledArr =
-                fromUnboxed (Z :. nf' :. newNy :. newNx) . VU.concat . L.concat $
-                pooledList'
-          in L.map (toUnboxed . computeS . R.slice pooledArr) $
-             [Z :. All :. j :. i|i <- [0 .. newNx - 1],j <- [0 .. newNy - 1]]
+  -> Conduit PVPOutputData (ResourceT IO) (R.Array U DIM3 Double)
+poolArrayConduit parallelParams poolingType poolingSize offset = do
+  xs <- CL.take (batchSize parallelParams)
+  unless
+    (L.null xs)
+    (do let pooledData =
+              case P.head xs of
+                PVP_OUTPUT_ACT _ _ ->
+                  error "Dosen't support pooling PVP_OUTPUT_ACT."
+                PVP_OUTPUT_NONSPIKING_ACT _ _ ->
+                  parMapChunk
+                    parallelParams
+                    rseq
+                    (\(PVP_OUTPUT_NONSPIKING_ACT (PVPDimension nx' ny' nf') x) ->
+                        let arr =
+                              listArray ((0, 0, 0), (ny' - 1, nx' - 1, nf' - 1)) .
+                              VU.toList $
+                              x
+                            pooledList =
+                              L.map
+                                (poolVec poolingType poolingSize .
+                                 extractScliceVec arr)
+                                [0 .. nf' - 1]
+                        in extractFeaturePoint nf' pooledList)
+                    xs
+                PVP_OUTPUT_ACT_SPARSEVALUES _ _ ->
+                  parMapChunk
+                    parallelParams
+                    rseq
+                    (\(PVP_OUTPUT_ACT_SPARSEVALUES layout@(PVPDimension _nx' _ny' nf') x) ->
+                        extractFeaturePoint nf' .
+                        P.map (poolVec poolingType poolingSize) .
+                        sparse2NonSparseVec layout . VU.toList $
+                        x)
+                    xs
+                _ -> error "poolArrayConduit: pvp file format is supported."
+        sourceList pooledData
+        poolArrayConduit parallelParams poolingType poolingSize offset)
+  where
+    extractFeaturePoint nf' pooledList' =
+      let newNy = L.length . L.head $ pooledList'
+          newNx = VU.length . L.head . L.head $ pooledList'
+          result =
+            computeS .
+            R.backpermute
+              (Z :. newNy :. newNx :. nf')
+              (\(Z :. j :. i :. k) -> (Z :. k :. j :. i)) .
+            fromUnboxed (Z :. nf' :. newNy :. newNx) . VU.concat . L.concat $
+            pooledList'
+      in deepSeqArray result result

@@ -21,6 +21,8 @@ import           Foreign.Ptr
 import           PetaVision.Data.Pooling
 import           PetaVision.Data.Pooling
 import           PetaVision.PVPFile.IO
+import           PetaVision.Utility.Array
+import           PetaVision.Utility.Conduit
 import           PetaVision.Utility.Parallel  as Parallel
 import           Prelude                      as P
 import           System.Environment
@@ -46,12 +48,12 @@ main =
      print params
      runResourceT $
        pvpFileSource (P.head $ pvpFile params) $$
-       poolVecFeaturePointConduit
+       poolArrayConduit
          (ParallelParams (Parser.numThread params)
                          (Parser.batchSize params))
          (poolingType params)
          (poolingSize params)
-         undefined =$=
+         undefined =$= mapP parallelParams extractFeaturePoint =$=
        fisherVectorConduit parallelParams
                            (P.head gmm) =$=
        featurePointConduit =$=
