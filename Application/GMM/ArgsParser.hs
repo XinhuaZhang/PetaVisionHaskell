@@ -125,7 +125,7 @@ parseFlag flags = go flags defaultFlag
                  ,poolingSize = 3
                  ,numGaussian = 1
                  ,gmmFile = "gmm.dat"
-                 ,threshold = -15}
+                 ,threshold = 0.01}
         go [] params = params
         go (x:xs) params =
           case x of

@@ -2,12 +2,13 @@ module Main where
 
 import           Application.GMM.ArgsParser   as Parser
 import           Application.GMM.Conduit
-import           Application.GMM.MixtureModel
 import           Application.GMM.FisherKernel
 import           Application.GMM.GMM
+import           Application.GMM.MixtureModel
 import           Classifier.LibLinear
+import           Control.Monad                as M
 import           Control.Monad.IO.Class
-import           Control.Monad.Parallel       as MP
+import           Control.Monad.Trans.Resource
 import           Data.Array.Repa              as R
 import           Data.Binary
 import           Data.Conduit
@@ -17,13 +18,14 @@ import           Data.Time
 import           Data.Vector.Unboxed          as VU
 import           Foreign.Ptr
 import           PetaVision.Data.Pooling
+import           PetaVision.Data.Pooling
 import           PetaVision.PVPFile.IO
 import           PetaVision.Utility.Parallel  as Parallel
 import           Prelude                      as P
 import           System.Environment
 
 trainSink
-  :: ParallelParams -> FilePath -> TrainParams -> Bool -> Sink (VU.Vector Double) IO ()
+  :: ParallelParams -> FilePath -> TrainParams -> Bool -> Sink (VU.Vector Double) (ResourceT IO) ()
 trainSink parallelParams filePath trainParams findCFlag =
   do xs <- consume
      if ((VU.length . P.head $ xs) /= (trainFeatureIndexMax trainParams))
@@ -35,7 +37,7 @@ trainSink parallelParams filePath trainParams findCFlag =
              ")"
         else return ()
      featurePtrs <-
-       liftIO $ MP.mapM (getFeatureVecPtr . Dense . VU.toList) xs
+       liftIO $ M.mapM (getFeatureVecPtr . Dense . VU.toList) xs
      label <- liftIO $ readLabelFile filePath
      if findCFlag
         then liftIO $ findParameterC trainParams label featurePtrs
@@ -71,12 +73,20 @@ main =
            TrainParams {trainSolver = L2R_L2LOSS_SVC_DUAL
                        ,trainC = c params
                        ,trainNumExamples = nBands header
-                       ,trainFeatureIndexMax = 2 * (nf header) * (numModel . P.head $ gmm)
+                       ,trainFeatureIndexMax =
+                          2 * (nf header) * (numModel . P.head $ gmm)
                        ,trainModel = modelName params}
      print params
-     pvpFileSource (P.head $ pvpFile params) $$
-       featureConduit parallelParams =$=
-       fisherVectorConduit parallelParams gmm =$=
+     runResourceT $
+       pvpFileSource (P.head $ pvpFile params) $$
+       poolVecFeaturePointConduit
+         (ParallelParams (Parser.numThread params)
+                         (Parser.batchSize params))
+         (poolingType params)
+         (poolingSize params)
+         undefined =$=
+       fisherVectorConduit parallelParams
+                           (P.head gmm) =$=
        trainSink parallelParams
                  (labelFile params)
                  trainParams

@@ -1,15 +1,16 @@
 module Classifier.LibLinear.Example where
 
+import           Classifier.LibLinear.Bindings
+import           Classifier.LibLinear.Solver
 import           Control.Monad
-import           Control.Monad.IO.Class                        (liftIO)
+import           Control.Monad.IO.Class        (liftIO)
+import           Control.Monad.Trans.Resource
 import           Data.Conduit
-import           Data.Conduit.List                             as CL
+import           Data.Conduit.List             as CL
 import           Foreign.C
 import           Foreign.Marshal.Array
 import           Foreign.Ptr
-import           Classifier.LibLinear.Bindings
-import           Classifier.LibLinear.Solver
-import           Prelude                                       as P
+import           Prelude                       as P
 
 data LibLinearFeature = Dense [Double] | Sparse [Double]
 
@@ -18,7 +19,7 @@ readLabelFile filePath =
   do bs <- readFile filePath
      return . P.map (\x -> read x :: Double) . lines $! bs
 
-labelSource :: FilePath -> Source IO Double
+labelSource :: FilePath -> Source (ResourceT IO) Double
 labelSource filePath =
   do labels <- liftIO . readLabelFile $ filePath
      sourceList labels

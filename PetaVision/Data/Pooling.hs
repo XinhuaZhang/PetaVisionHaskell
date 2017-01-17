@@ -2,20 +2,23 @@ module PetaVision.Data.Pooling
   ( PoolingType(..)
   , poolConduit
   , poolVecConduit
+  , poolVecFeaturePointConduit
   ) where
 
 import           Control.DeepSeq
-import           Control.Monad               as M
-import           Data.Array.Unboxed          as Arr
+import           Control.Monad                as M
+import           Control.Monad.Trans.Resource
+import           Data.Array.Repa              as R
+import           Data.Array.Unboxed           as Arr
 import           Data.Conduit
-import           Data.Conduit.List           as CL
-import           Data.List                   as L
-import           Data.Vector         as V
-import           Data.Vector.Unboxed         as VU
+import           Data.Conduit.List            as CL
+import           Data.List                    as L
+import           Data.Vector                  as V
+import           Data.Vector.Unboxed          as VU
 import           GHC.Float
 import           PetaVision.PVPFile.IO
 import           PetaVision.Utility.Parallel
-import           Prelude                     as P
+import           Prelude                      as P
 
 data PoolingType
   = Max
@@ -70,7 +73,7 @@ pool Max = maxPoolMatrix
 pool Avg = avgPoolMatrix
 
 
--- CPU pooling via unboxed vector 
+-- CPU pooling via unboxed vector
 sumPoolVecU :: (Unbox a)
             => Int
             -> (a -> a -> a)
@@ -82,7 +85,7 @@ sumPoolVecU poolSize add sub xs =
             (VU.foldl1' add as)
             (VU.zip xs bs)
   where (as,bs) = VU.splitAt poolSize xs
-  
+
 sumPoolVec
   :: Int -> (a -> a -> a) -> (a -> a -> a) -> V.Vector a -> V.Vector a
 sumPoolVec poolSize add sub xs =
@@ -90,7 +93,7 @@ sumPoolVec poolSize add sub xs =
            (V.foldl1' add as)
            (V.zip xs bs)
   where (as,bs) = V.splitAt poolSize xs
-  
+
 maxPoolVecU
   :: (Ord a
      ,Unbox a)
@@ -104,7 +107,7 @@ maxPoolVecU poolSize maxOp ys
   | otherwise = [max]
   where (as,bs) = VU.splitAt poolSize ys
         max = maxOp as
-        
+
 maxPoolVec
   :: (Ord a
      )
@@ -118,7 +121,7 @@ maxPoolVec poolSize maxOp ys
   | otherwise = [max]
   where (as,bs) = V.splitAt poolSize ys
         max = maxOp as
-        
+
 vecUOp
   :: (Unbox a)
   => (a -> a -> a) -> VU.Vector a -> VU.Vector a -> VU.Vector a
@@ -135,7 +138,7 @@ avgPoolVecMatrix poolSize xs =
              (vecUOp (+))
              (vecUOp (-))
              xs
-             
+
 maxPoolVecMatrix
   :: (Ord a
      ,Unbox a)
@@ -145,13 +148,13 @@ maxPoolVecMatrix poolSize xs =
   maxPoolVec poolSize
              (V.foldl1' (VU.zipWith max))
              xs
-             
+
 poolVec
   :: (Floating a
      ,Ord a
      ,Unbox a)
   => PoolingType -> Int -> V.Vector (VU.Vector a) -> [VU.Vector a]
-poolVec Max poolSize = P.map VU.fromList . maxPoolVecMatrix poolSize 
+poolVec Max poolSize = P.map VU.fromList . maxPoolVecMatrix poolSize
 poolVec Avg poolSize = V.toList . avgPoolVecMatrix poolSize
 
 splitVector
@@ -189,19 +192,19 @@ sparse2NonSparse (PVPDimension nx ny nf) frame =
                 n3 = (mod i n1)
                 b = div n3 n2
                 a = mod n3 n2
-                
+
 extractScliceVec :: Arr.Array (Int,Int,Int) Double
                  -> Int
                  -> V.Vector (VU.Vector Double)
 extractScliceVec arr featureIndex =
   V.map (\y ->
            VU.map (\x -> arr Arr.! (x,y,featureIndex)) $
-           VU.generate (nx + 1)
+           VU.generate (nx' + 1)
                        id) $
-  V.generate (ny + 1)
+  V.generate (ny' + 1)
              id
-  where ((_,_,_),(ny,nx,_nf)) = bounds arr
-  
+  where ((_,_,_),(ny',nx',_nf)) = bounds arr
+
 
 sparse2NonSparseVec
   :: PVPDimension -> [(Int,Double)] -> [V.Vector (VU.Vector Double)]
@@ -275,7 +278,7 @@ poolConduit parallelParams poolingType poolingSize offset =
                 sourceList $!! pooledData
                 poolConduit parallelParams poolingType poolingSize offset
         else return ()
-        
+
 
 poolVecConduit
   :: ParallelParams
@@ -328,5 +331,58 @@ poolVecConduit parallelParams poolingType poolingSize offset =
                                x)
                             xs
                 sourceList $!! pooledData
-                poolConduit parallelParams poolingType poolingSize offset
+                poolVecConduit parallelParams poolingType poolingSize offset
         else return ()
+
+
+poolVecFeaturePointConduit
+  :: ParallelParams
+  -> PoolingType
+  -> Int
+  -> Int
+  -> Conduit PVPOutputData (ResourceT IO) [VU.Vector Double]
+poolVecFeaturePointConduit parallelParams poolingType poolingSize offset =
+  do xs <- CL.take (batchSize parallelParams)
+     unless (L.null xs)
+            (do let pooledData =
+                      case P.head xs of
+                        PVP_OUTPUT_ACT _ _ ->
+                          error "Dosen't support pooling PVP_OUTPUT_ACT."
+                        PVP_OUTPUT_NONSPIKING_ACT _ _ ->
+                          parMapChunk
+                            parallelParams
+                            rdeepseq
+                            (\(PVP_OUTPUT_NONSPIKING_ACT (PVPDimension nx' ny' nf') x) ->
+                               let arr =
+                                     listArray ((0,0,0)
+                                               ,(ny' - 1,nx' - 1,nf' - 1)) .
+                                     VU.toList $
+                                     x
+                                   pooledList =
+                                     P.map (poolVec poolingType poolingSize .
+                                            extractScliceVec arr) $
+                                     [0 .. nf' - 1]
+                               in extractFeaturePoint nf' pooledList)
+                            xs
+                        PVP_OUTPUT_ACT_SPARSEVALUES _ _ ->
+                          parMapChunk
+                            parallelParams
+                            rdeepseq
+                            (\(PVP_OUTPUT_ACT_SPARSEVALUES layout@(PVPDimension _nx' _ny' nf') x) ->
+                               extractFeaturePoint nf' .
+                               P.map (poolVec poolingType poolingSize) .
+                               sparse2NonSparseVec layout . VU.toList $
+                               x)
+                            xs
+                        _ ->
+                          error "poolVecFeaturePointConduit: pvp file format is supported."
+                sourceList $!! pooledData
+                poolVecFeaturePointConduit parallelParams poolingType poolingSize offset)
+  where extractFeaturePoint nf' pooledList' =
+          let newNy = L.length . L.head $ pooledList'
+              newNx = VU.length . L.head . L.head $ pooledList'
+              pooledArr =
+                fromUnboxed (Z :. nf' :. newNy :. newNx) . VU.concat . L.concat $
+                pooledList'
+          in L.map (toUnboxed . computeS . R.slice pooledArr) $
+             [Z :. All :. j :. i|i <- [0 .. newNx - 1],j <- [0 .. newNy - 1]]
