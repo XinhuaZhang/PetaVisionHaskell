@@ -283,50 +283,53 @@ poolVecConduit
   -> Int
   -> Int
   -> Conduit PVPOutputData IO (VU.Vector (Int,Double))
-poolVecConduit parallelParams poolingType poolingSize offset =
-  do xs <- CL.take (batchSize parallelParams)
-     if P.length xs > 0
-        then do let pooledData =
-                      case P.head xs of
-                        PVP_OUTPUT_ACT _ _ ->
-                          error "Dosen't support pooling PVP_OUTPUT_ACT."
-                        PVP_OUTPUT_NONSPIKING_ACT _ _ ->
-                          parMapChunk
-                            parallelParams
-                            rdeepseq
-                            (\(PVP_OUTPUT_NONSPIKING_ACT (PVPDimension nx' ny' nf') x) ->
-                               let arr =
-                                     listArray ((0,0,0)
-                                               ,(ny' - 1,nx' - 1,nf' - 1)) .
-                                     VU.toList $
-                                     x
-                               in VU.filter (\(i,v) -> v /= 0) .
-                                  (\vec ->
-                                     VU.zip (VU.generate (VU.length vec)
-                                                         (\i -> i + 1 + offset))
-                                            vec) .
-                                  VU.concat .
-                                  P.concat .
-                                  P.map (poolVec poolingType poolingSize .
-                                         extractScliceVec arr) $
-                                  [0 .. nf' - 1])
-                            xs
-                        PVP_OUTPUT_ACT_SPARSEVALUES _ _ ->
-                          parMapChunk
-                            parallelParams
-                            rdeepseq
-                            (\(PVP_OUTPUT_ACT_SPARSEVALUES layout x) ->
-                               VU.filter (\(i,v) -> v /= 0) .
-                               (\vec ->
-                                  VU.zip (VU.generate (VU.length vec)
-                                                      (\i -> i + 1 + offset))
-                                         vec) .
-                               VU.concat .
-                               P.concat .
-                               P.map (poolVec poolingType poolingSize) .
-                               sparse2NonSparseVec layout . VU.toList $
-                               x)
-                            xs
-                sourceList $!! pooledData
-                poolConduit parallelParams poolingType poolingSize offset
-        else return ()
+poolVecConduit parallelParams poolingType poolingSize offset = do
+  xs <- CL.take (batchSize parallelParams)
+  unless
+    (L.null xs)
+    (do let pooledData =
+              case P.head xs of
+                PVP_OUTPUT_ACT _ _ ->
+                  error "Dosen't support pooling PVP_OUTPUT_ACT."
+                PVP_OUTPUT_NONSPIKING_ACT _ _ ->
+                  parMapChunk
+                    parallelParams
+                    rdeepseq
+                    (\(PVP_OUTPUT_NONSPIKING_ACT (PVPDimension nx' ny' nf') x) ->
+                        let arr =
+                              listArray ((0, 0, 0), (ny' - 1, nx' - 1, nf' - 1)) .
+                              VU.toList $
+                              x
+                        in VU.filter (\(_i, v) -> v /= 0) .
+                           (\vec ->
+                               VU.zip
+                                 (VU.generate
+                                    (VU.length vec)
+                                    (\i -> i + 1 + offset))
+                                 vec) .
+                           VU.concat .
+                           P.concatMap
+                             (poolVec poolingType poolingSize .
+                              extractScliceVec arr) $
+                           [0 .. nf' - 1])
+                    xs
+                PVP_OUTPUT_ACT_SPARSEVALUES _ _ ->
+                  parMapChunk
+                    parallelParams
+                    rdeepseq
+                    (\(PVP_OUTPUT_ACT_SPARSEVALUES layout x) ->
+                        VU.filter (\(_i, v) -> v /= 0) .
+                        (\vec ->
+                            VU.zip
+                              (VU.generate
+                                 (VU.length vec)
+                                 (\i -> i + 1 + offset))
+                              vec) .
+                        VU.concat .
+                        P.concatMap (poolVec poolingType poolingSize) .
+                        sparse2NonSparseVec layout . VU.toList $
+                        x)
+                    xs
+                _ -> error "poolVecConduit: pvp output format is not supported."
+        sourceList $!! pooledData
+        poolVecConduit parallelParams poolingType poolingSize offset)
