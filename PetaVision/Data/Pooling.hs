@@ -5,6 +5,7 @@ module PetaVision.Data.Pooling
   , poolVecConduit
   , poolArrayConduit
   , poolGrid
+  , gridNum
   ) where
 
 import           Control.DeepSeq
@@ -411,4 +412,11 @@ poolGrid poolSize stride f arr =
     (Z :. ny' :. nx' :. nf') = extent arr
     startPointList len =
       L.filter (\i -> i + poolSize <= len) [0,stride .. len - 1]
+      
 
+gridNum :: Int -> Int -> Int -> Int -> Int
+gridNum poolSize stride nx' ny' =
+  L.length (startPointList nx') * L.length (startPointList ny')
+  where
+    startPointList len =
+      L.filter (\i -> i + poolSize <= len) [0,stride .. len - 1]

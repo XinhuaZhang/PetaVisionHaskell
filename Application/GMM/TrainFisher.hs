@@ -75,7 +75,13 @@ main = do
         { trainSolver = L2R_L2LOSS_SVC_DUAL
         , trainC = c params
         , trainNumExamples = nBands header
-        , trainFeatureIndexMax = 2 * (nf header) * (numModel . P.head $ gmm)
+        , trainFeatureIndexMax =
+            2 * (nf header) * (numModel . P.head $ gmm) *
+            (gridNum
+               (poolingSize params)
+               (poolingStride params)
+               (nx header)
+               (ny header))
         , trainModel = modelName params
         }
   print params
