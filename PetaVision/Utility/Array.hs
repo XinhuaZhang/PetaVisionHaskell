@@ -30,3 +30,35 @@ extractFeatureMap arr =
        (toUnboxed . computeS . R.slice arr)
        [ Z :. All :. All :. i
        | i <- [0 .. nf' - 1] ]
+
+
+{-# INLINE crop #-}
+
+crop
+  :: (Source s e
+     ,Shape sh)
+  => [Int] -> [Int] -> Array s sh e -> Array D sh e
+crop start len arr
+  | L.any (< 0) start ||
+      L.or (L.zipWith3 (\x y z -> x > (z - y))
+                       start
+                       len
+                       dList) =
+    error $
+    "Crop out of boundary!\n" L.++ show start L.++ "\n" L.++ show len L.++ "\n" L.++
+    show dList
+  | otherwise =
+    R.backpermute (shapeOfList len)
+                (shapeOfList . L.zipWith (+) start . listOfShape)
+                arr
+  where dList = listOfShape $ extent arr
+  
+{-# INLINE cropUnsafe #-}
+
+cropUnsafe
+  :: (Source s e
+     ,Shape sh)
+  => [Int] -> [Int] -> Array s sh e -> Array D sh e
+cropUnsafe start len =
+  R.backpermute (shapeOfList len)
+              (shapeOfList . L.zipWith (+) start . listOfShape)

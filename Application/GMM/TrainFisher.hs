@@ -60,36 +60,36 @@ trainSink parallelParams filePath trainParams findCFlag =
                 else liftIO $
                      train trainParams label (P.concat . L.reverse $ pss)
 
-main =
-  do args <- getArgs
-     if P.null args
-        then error "run with --help to see options."
-        else return ()
-     params <- parseArgs args
-     header <- readPVPHeader . P.head $ pvpFile params
-     gmm <- readGMM (gmmFile params) :: IO [GMM]
-     let parallelParams =
-           ParallelParams (Parser.numThread params)
-                          (Parser.batchSize params)
-         trainParams =
-           TrainParams {trainSolver = L2R_L2LOSS_SVC_DUAL
-                       ,trainC = c params
-                       ,trainNumExamples = nBands header
-                       ,trainFeatureIndexMax =
-                          2 * (nf header) * (numModel . P.head $ gmm)
-                       ,trainModel = modelName params}
-     print params
-     runResourceT $
-       pvpFileSource (P.head $ pvpFile params) $$
-       poolArrayConduit
-         (ParallelParams (Parser.numThread params)
-                         (Parser.batchSize params))
-         (poolingType params)
+main = do
+  args <- getArgs
+  if P.null args
+    then error "run with --help to see options."
+    else return ()
+  params <- parseArgs args
+  header <- readPVPHeader . P.head $ pvpFile params
+  gmm <- readGMM (gmmFile params) :: IO [GMM]
+  let parallelParams =
+        ParallelParams (Parser.numThread params) (Parser.batchSize params)
+      trainParams =
+        TrainParams
+        { trainSolver = L2R_L2LOSS_SVC_DUAL
+        , trainC = c params
+        , trainNumExamples = nBands header
+        , trainFeatureIndexMax = 2 * (nf header) * (numModel . P.head $ gmm)
+        , trainModel = modelName params
+        }
+  print params
+  runResourceT $
+    pvpFileSource (P.head $ pvpFile params) $$
+    poolArrayConduit
+      (ParallelParams (Parser.numThread params) (Parser.batchSize params))
+      (poolingType params)
+      (poolingSize params)
+      undefined =$=
+    mapP
+      parallelParams
+      (poolGrid
          (poolingSize params)
-         undefined =$= mapP parallelParams extractFeaturePoint =$=
-       fisherVectorConduit parallelParams
-                           (P.head gmm) =$=
-       trainSink parallelParams
-                 (labelFile params)
-                 trainParams
-                 (findC params)
+         (poolingStride params)
+         (fisherVector (P.head gmm) . extractFeaturePoint)) =$=
+    trainSink parallelParams (labelFile params) trainParams (findC params)

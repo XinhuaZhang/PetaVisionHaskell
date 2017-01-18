@@ -21,22 +21,24 @@ data Flag
   | NumGaussian Int
   | GMMFile String
   | Threshold Double
+  | PoolingStride Int
   deriving (Show)
 
 data Params =
-  Params {pvpFile     :: [String]
-         ,labelFile   :: String
-         ,c           :: Double
-         ,numThread   :: Int
-         ,modelName   :: String
-         ,findC       :: Bool
-         ,poolingFlag :: Bool
-         ,poolingType :: PoolingType
-         ,batchSize   :: Int
-         ,poolingSize :: Int
-         ,numGaussian :: Int
-         ,gmmFile     :: String
-         ,threshold   :: Double}
+  Params {pvpFile       :: [String]
+         ,labelFile     :: String
+         ,c             :: Double
+         ,numThread     :: Int
+         ,modelName     :: String
+         ,findC         :: Bool
+         ,poolingFlag   :: Bool
+         ,poolingType   :: PoolingType
+         ,batchSize     :: Int
+         ,poolingSize   :: Int
+         ,numGaussian   :: Int
+         ,gmmFile       :: String
+         ,threshold     :: Double
+         ,poolingStride :: Int}
   deriving (Show)
 
 options :: [OptDescr Flag]
@@ -88,7 +90,11 @@ options =
   ,Option ['h']
           ["threshold"]
           (ReqArg (\x -> Threshold $ readDouble x) "DOUBLE")
-          "Set the stoppint criteria. It is the percentage that the probability increases. If it is lower than the threshold, then the program stops."]
+          "Set the stoppint criteria. It is the percentage that the probability increases. If it is lower than the threshold, then the program stops."
+  ,Option ['s']
+          ["poolingStride"]
+          (ReqArg (\x -> PoolingStride $ readInt x) "INT")
+          "Set pooling stride (Defaule 1)."]
 
 readInt :: String -> Int
 readInt str =
@@ -125,7 +131,8 @@ parseFlag flags = go flags defaultFlag
                  ,poolingSize = 3
                  ,numGaussian = 1
                  ,gmmFile = "gmm.dat"
-                 ,threshold = 0.01}
+                 ,threshold = 0.01
+                 ,poolingStride = 1}
         go [] params = params
         go (x:xs) params =
           case x of
@@ -143,6 +150,7 @@ parseFlag flags = go flags defaultFlag
             NumGaussian n -> go xs (params {numGaussian = n})
             GMMFile str -> go xs (params {gmmFile = str})
             Threshold v -> go xs (params {threshold = v})
+            PoolingStride n -> go xs (params {poolingStride = n})
 
 parseArgs :: [String] -> IO Params
 parseArgs args =

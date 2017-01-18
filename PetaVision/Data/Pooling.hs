@@ -4,6 +4,7 @@ module PetaVision.Data.Pooling
   , poolConduit
   , poolVecConduit
   , poolArrayConduit
+  , poolGrid
   ) where
 
 import           Control.DeepSeq
@@ -18,6 +19,7 @@ import           Data.Vector                  as V
 import           Data.Vector.Unboxed          as VU
 import           GHC.Float
 import           PetaVision.PVPFile.IO
+import           PetaVision.Utility.Array
 import           PetaVision.Utility.Parallel
 import           Prelude                      as P
 
@@ -391,3 +393,22 @@ poolArrayConduit parallelParams poolingType poolingSize offset = do
             fromUnboxed (Z :. nf' :. newNy :. newNx) . VU.concat . L.concat $
             pooledList'
       in deepSeqArray result result
+
+poolGrid
+  :: (R.Source s e, Unbox e)
+  => Int
+  -> Int
+  -> (R.Array D DIM3 e -> VU.Vector e)
+  -> R.Array s DIM3 e
+  -> VU.Vector e
+poolGrid poolSize stride f arr =
+  VU.concat
+    [ f . cropUnsafe [0, i, j] [nf', poolSize, poolSize] $ arr
+    | i <- startPointList nx'
+    , j <- startPointList ny'
+    ]
+  where
+    (Z :. ny' :. nx' :. nf') = extent arr
+    startPointList len =
+      L.filter (\i -> i + poolSize <= len) [0,stride .. len - 1]
+

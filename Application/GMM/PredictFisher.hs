@@ -53,9 +53,12 @@ main =
                          (Parser.batchSize params))
          (poolingType params)
          (poolingSize params)
-         undefined =$= mapP parallelParams extractFeaturePoint =$=
-       fisherVectorConduit parallelParams
-                           (P.head gmm) =$=
+         undefined =$= mapP
+                         parallelParams
+                         (poolGrid
+                            (poolingSize params)
+                            (poolingStride params)
+                            (fisherVector (P.head gmm) . extractFeaturePoint)) =$= 
        featurePointConduit =$=
        mergeSource (labelSource $ labelFile params) =$=
        predict (modelName params)

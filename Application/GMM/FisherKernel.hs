@@ -52,6 +52,17 @@ fisherVectorSigma gmm xs =
     xs
   where
     assignments = getAssignmentVec gmm xs
+    
+fisherVector :: GMM -> [VU.Vector Double] -> VU.Vector Double
+fisherVector gmm x
+  | l2Norm == 0 = VU.replicate (VU.length vec) 0
+  | otherwise = VU.map (/ l2Norm) powerVec
+  where
+    !vecMu = fisherVectorMu gmm x
+    !vecSigma = fisherVectorSigma gmm x
+    !vec = vecMu VU.++ vecSigma
+    !powerVec = VU.map (\x' -> signum x' * (abs x' ** 0.5)) vec
+    !l2Norm = sqrt (VU.foldl' (\a b -> a + b ^ (2 :: Int)) 0 powerVec)
 
 fisherVectorConduit
   :: ParallelParams
