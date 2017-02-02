@@ -13,6 +13,7 @@ import           Classifier.LibLinear.Example
 import           Classifier.LibLinear.Interface
 import           Control.Monad                  as M
 import           Control.Monad.IO.Class
+import           Control.Monad.Trans.Resource
 import           Data.Conduit
 import           Data.Conduit.List              as CL
 import           Data.List                      as L
@@ -25,7 +26,7 @@ import           Prelude                        as P
 -- Assume that it is 1x1xnf
 readPVPLabelFile :: FilePath -> IO [Double]
 readPVPLabelFile filePath = do
-  labels <- pvpFileSource filePath $$ CL.consume
+  labels <- runResourceT $ pvpFileSource filePath $$ CL.consume
   return .
     P.map
       (\x ->
@@ -33,8 +34,8 @@ readPVPLabelFile filePath = do
             PVP_OUTPUT_ACT_SPARSEVALUES _ ys -> fromIntegral . fst . VU.head $ ys
             _ -> error "readPVPLabelFile: file format is supported.") $
     labels
-    
-pvpLabelSource :: FilePath -> Source IO Double
+
+pvpLabelSource :: FilePath -> Source (ResourceT IO) Double
 pvpLabelSource filePath =
   pvpFileSource filePath =$=
   CL.map
@@ -52,11 +53,11 @@ getFeaturePtr xs = newArray (pairs P.++ [C'feature_node (-1) 0])
 trainSink :: TrainParams
           -> [FilePath]
           -> Int -> Bool
-          -> Sink (VU.Vector (Int, Double)) IO ()
+          -> Sink (VU.Vector (Int, Double)) (ResourceT IO) ()
 trainSink params filePath batchSize findCFlag = do
   label <-
     liftIO .
-    fmap (L.concat . L.transpose) . 
+    fmap (L.concat . L.transpose) .
     M.mapM
       (if L.isSuffixOf ".pvp" . L.head $ filePath
          then readPVPLabelFile
@@ -81,7 +82,7 @@ trainSink params filePath batchSize findCFlag = do
         else return ptrs
 
 -- liblinear feature node's index starts from 1 !!!!!
-concatConduit :: [Int] -> Conduit [PVPOutputData] IO (VU.Vector (Int, Double))
+concatConduit :: [Int] -> Conduit [PVPOutputData] (ResourceT IO) (VU.Vector (Int, Double))
 concatConduit offset =
   awaitForever
     (yield .
@@ -95,10 +96,10 @@ concatConduit offset =
     parsePVPOutputData (PVP_OUTPUT_ACT_SPARSEVALUES _ xs) = xs
     parsePVPOutputData _ = error "Doesn't support this type of pvpfile."
 
-concatPooledConduit :: Conduit [VU.Vector (Int, Double)] IO (VU.Vector (Int, Double))
+concatPooledConduit :: Conduit [VU.Vector (Int, Double)] (ResourceT IO) (VU.Vector (Int, Double))
 concatPooledConduit = awaitForever (yield . VU.concat)
 
-predictConduit :: Conduit (VU.Vector (Int, Double)) IO (Ptr C'feature_node)
+predictConduit :: Conduit (VU.Vector (Int, Double)) (ResourceT IO) (Ptr C'feature_node)
 predictConduit =
   awaitForever
     (\x -> do

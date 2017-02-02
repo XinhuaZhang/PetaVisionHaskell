@@ -22,6 +22,7 @@ data Flag
   | GMMFile String
   | Threshold Double
   | PoolingStride Int
+  | MuVarFile String
   deriving (Show)
 
 data Params =
@@ -38,7 +39,8 @@ data Params =
          ,numGaussian   :: Int
          ,gmmFile       :: String
          ,threshold     :: Double
-         ,poolingStride :: Int}
+         ,poolingStride :: Int
+         ,muVarFile     :: String}
   deriving (Show)
 
 options :: [OptDescr Flag]
@@ -94,7 +96,11 @@ options =
   ,Option ['s']
           ["poolingStride"]
           (ReqArg (\x -> PoolingStride $ readInt x) "INT")
-          "Set pooling stride (Defaule 1)."]
+          "Set pooling stride (Defaule 1)."
+  ,Option ['z']
+          ["MuVarFile"]
+          (ReqArg MuVarFile "FILE")
+          "Tree data file."]
 
 readInt :: String -> Int
 readInt str =
@@ -132,7 +138,8 @@ parseFlag flags = go flags defaultFlag
                  ,numGaussian = 1
                  ,gmmFile = "gmm.dat"
                  ,threshold = 0.01
-                 ,poolingStride = 1}
+                 ,poolingStride = 1
+                 ,muVarFile = ""}
         go [] params = params
         go (x:xs) params =
           case x of
@@ -151,6 +158,7 @@ parseFlag flags = go flags defaultFlag
             GMMFile str -> go xs (params {gmmFile = str})
             Threshold v -> go xs (params {threshold = v})
             PoolingStride n -> go xs (params {poolingStride = n})
+            MuVarFile str -> go xs (params {muVarFile = str})
 
 parseArgs :: [String] -> IO Params
 parseArgs args =

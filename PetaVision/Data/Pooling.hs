@@ -3,6 +3,7 @@ module PetaVision.Data.Pooling
   ( PoolingType(..)
   , poolConduit
   , poolVecConduit
+  , poolVecConduit1
   , poolArrayConduit
   , poolGrid
   , gridNum
@@ -289,7 +290,7 @@ poolVecConduit
   -> PoolingType
   -> Int
   -> Int
-  -> Conduit PVPOutputData IO (VU.Vector (Int,Double))
+  -> Conduit PVPOutputData (ResourceT IO) (VU.Vector (Int,Double))
 poolVecConduit parallelParams poolingType poolingSize offset =
   do xs <- CL.take (batchSize parallelParams)
      if P.length xs > 0
@@ -336,6 +337,81 @@ poolVecConduit parallelParams poolingType poolingSize offset =
                             xs
                 sourceList $!! pooledData
                 poolVecConduit parallelParams poolingType poolingSize offset
+        else return ()
+        
+
+poolVecConduit1
+  :: ParallelParams
+  -> PoolingType
+  -> Int
+  -> Int
+  -> Conduit PVPOutputData (ResourceT IO) (VU.Vector (Int,Double))
+poolVecConduit1 parallelParams poolingType poolingSize offset =
+  do xs <- CL.take (batchSize parallelParams)
+     if P.length xs > 0
+        then do let pooledData =
+                      case P.head xs of
+                        PVP_OUTPUT_ACT _ _ ->
+                          error "Dosen't support pooling PVP_OUTPUT_ACT."
+                        PVP_OUTPUT_NONSPIKING_ACT _ _ ->
+                          parMapChunk
+                            parallelParams
+                            rdeepseq
+                            (\(PVP_OUTPUT_NONSPIKING_ACT (PVPDimension nx' ny' nf') x) ->
+                               let arr =
+                                     listArray ((0,0,0)
+                                               ,(ny' - 1,nx' - 1,nf' - 1)) .
+                                     VU.toList $
+                                     x
+                                   pooledList =
+                                     L.map (poolVec poolingType poolingSize .
+                                            extractScliceVec arr)
+                                           [0 .. nf' - 1]
+                                   newNy = L.length . L.head $ pooledList
+                                   newNx =
+                                     VU.length . L.head . L.head $ pooledList
+                                   result =
+                                     computeS .
+                                     downsample [4,4,1] .
+                                     fromUnboxed (Z :. nf' :. newNy :. newNx) .
+                                     VU.concat . L.concat $
+                                     pooledList
+                               in VU.filter (\(i,v) -> v /= 0) .
+                                  (\vec ->
+                                     VU.zip (VU.generate (VU.length vec)
+                                                         (\i -> i + 1 + offset))
+                                            vec) .
+                                  toUnboxed $
+                                  result)
+                            xs
+                        PVP_OUTPUT_ACT_SPARSEVALUES _ _ ->
+                          parMapChunk
+                            parallelParams
+                            rdeepseq
+                            (\(PVP_OUTPUT_ACT_SPARSEVALUES layout@(PVPDimension nx' ny' nf') x) ->
+                               let pooledList =
+                                     P.map (poolVec poolingType poolingSize) .
+                                     sparse2NonSparseVec layout . VU.toList $
+                                     x
+                                   newNy = L.length . L.head $ pooledList
+                                   newNx =
+                                     VU.length . L.head . L.head $ pooledList
+                                   result =
+                                     computeS .
+                                     downsample [4,4,1] .
+                                     fromUnboxed (Z :. nf' :. newNy :. newNx) .
+                                     VU.concat . L.concat $
+                                     pooledList
+                               in VU.filter (\(i,v) -> v /= 0) .
+                                  (\vec ->
+                                     VU.zip (VU.generate (VU.length vec)
+                                                         (\i -> i + 1 + offset))
+                                            vec) .
+                                  toUnboxed $
+                                  result)
+                            xs
+                sourceList $!! pooledData
+                poolVecConduit1 parallelParams poolingType poolingSize offset
         else return ()
 
 
@@ -403,16 +479,16 @@ poolGrid
   -> R.Array s DIM3 e
   -> VU.Vector e
 poolGrid poolSize stride f arr =
-  VU.concat
-    [ f . cropUnsafe [0, i, j] [nf', poolSize, poolSize] $ arr
-    | i <- startPointList nx'
-    , j <- startPointList ny'
-    ]
-  where
-    (Z :. ny' :. nx' :. nf') = extent arr
-    startPointList len =
-      L.filter (\i -> i + poolSize <= len) [0,stride .. len - 1]
-      
+  VU.concat [f .
+             cropUnsafe [0,i,j]
+                        [nf',poolSize,poolSize] $
+             arr|i <- startPointList nx',j <- startPointList ny']
+  where (Z :. ny' :. nx' :. nf') = extent arr
+        startPointList len =
+          L.filter (\i -> i + poolSize <= len)
+                   [0,stride .. len - 1]
+
+
 
 gridNum :: Int -> Int -> Int -> Int -> Int
 gridNum poolSize stride nx' ny' =

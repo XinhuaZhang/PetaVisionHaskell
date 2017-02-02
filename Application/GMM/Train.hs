@@ -17,26 +17,28 @@ import           Prelude                      as P
 import           System.Environment
 import           System.IO
 
-main = do
-  args <- getArgs
-  if null args
-    then error "run with --help to see options."
-    else return ()
-  params <- parseArgs args
-  let parallelParams =
-        ParallelParams (Parser.numThread params) (Parser.batchSize params)
-  print params
-  runResourceT
-    (pvpFileSource (P.head $ pvpFile params) $$
-     poolArrayConduit
-       (ParallelParams (Parser.numThread params) (Parser.batchSize params))
-       (poolingType params)
-       (poolingSize params)
-       undefined =$=
-     mapP parallelParams extractFeaturePoint =$=
-     gmmSink
-       parallelParams
-       (gmmFile params)
-       (numGaussian params)
-       (threshold params)
-       100)
+main =
+  do args <- getArgs
+     if null args
+        then error "run with --help to see options."
+        else return ()
+     params <- parseArgs args
+     let parallelParams =
+           ParallelParams (Parser.numThread params)
+                          (Parser.batchSize params)
+     print params
+     runResourceT
+       (pvpFileSource (P.head $ pvpFile params) $$
+        -- poolArrayConduit
+        --   (ParallelParams (Parser.numThread params) (Parser.batchSize params))
+        --   (poolingType params)
+        --   (poolingSize params)
+        --   undefined =$=
+        CL.map pvpOutputData2Array =$=
+        mapP parallelParams extractFeaturePoint =$=
+        gmmSink parallelParams
+                (gmmFile params)
+                (muVarFile params)
+                (numGaussian params)
+                (threshold params)
+                100)

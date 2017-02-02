@@ -20,10 +20,10 @@ getGridImage weight =
       ImageRGB8 $
       generateImage
         (\i j ->
-           let imgRowIdx = div i gridImgHeight
-               imgColIdx = div j gridImgWidth
-               pixelRowIdx = mod i gridImgHeight
-               pixelColIdx = mod j gridImgWidth
+           let imgRowIdx = div j gridImgHeight
+               imgColIdx = div i gridImgWidth
+               pixelRowIdx = mod j gridImgHeight
+               pixelColIdx = mod i gridImgWidth
                pixelRowImgIdx = pixelRowIdx - numPixelBorderY
                pixelColImgIdx = pixelColIdx - numPixelBorderX
            in if (pixelRowImgIdx < 0) ||
@@ -52,10 +52,10 @@ getGridImage weight =
       ImageY8 $
       generateImage
         (\i j ->
-           let imgRowIdx = div i gridImgHeight
-               imgColIdx = div j gridImgWidth
-               pixelRowIdx = mod i gridImgHeight
-               pixelColIdx = mod j gridImgWidth
+           let imgRowIdx = div j gridImgHeight
+               imgColIdx = div i gridImgWidth
+               pixelRowIdx = mod j gridImgHeight
+               pixelColIdx = mod i gridImgWidth
                pixelRowImgIdx = pixelRowIdx - numPixelBorderY
                pixelColImgIdx = pixelColIdx - numPixelBorderX
            in if (pixelRowImgIdx < 0) ||

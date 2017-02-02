@@ -62,3 +62,35 @@ cropUnsafe
 cropUnsafe start len =
   R.backpermute (shapeOfList len)
               (shapeOfList . L.zipWith (+) start . listOfShape)
+
+
+-- factor = 2^n, n = 0,1,..
+-- the first factor in the list corresponds to the inner-most (right-most) dimension.
+   
+{-# INLINE downsample #-}
+
+downsample
+  :: (Source s e
+     ,Shape sh)
+  => [Int] -> Array s sh e -> Array D sh e
+downsample factorList arr
+  | L.any (< 1) newDList = error $ "Downsample factors are too large." L.++ show dList L.++ "\n" L.++ show factorList
+  | otherwise =
+    R.backpermute (shapeOfList newDList)
+                (shapeOfList . L.zipWith (*) factorList . listOfShape)
+                arr
+  where dList = listOfShape . extent $ arr
+        newDList = L.zipWith div dList factorList
+
+{-# INLINE downsampleUnsafe #-}
+
+downsampleUnsafe
+  :: (Source s e
+     ,Shape sh)
+  => [Int] -> Array s sh e -> Array D sh e
+downsampleUnsafe factorList arr =
+  R.backpermute newSh
+              (shapeOfList . L.zipWith (*) factorList . listOfShape)
+              arr
+  where dList = listOfShape $ extent arr
+        newSh = shapeOfList $ L.zipWith div dList factorList

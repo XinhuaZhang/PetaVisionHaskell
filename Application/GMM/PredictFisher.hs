@@ -26,13 +26,13 @@ import           PetaVision.Utility.Conduit
 import           PetaVision.Utility.Parallel  as Parallel
 import           Prelude                      as P
 import           System.Environment
+import           Control.Monad.Parallel                as MP
 
-featurePointConduit :: Conduit (VU.Vector Double) (ResourceT IO) (Ptr C'feature_node)
-featurePointConduit =
-  awaitForever
-    (\x ->
-       do y <- liftIO . getFeatureVecPtr . Dense . VU.toList $ x
-          yield y)
+featurePointConduit :: ParallelParams -> Conduit (VU.Vector Double) (ResourceT IO) (Ptr C'feature_node)
+featurePointConduit parallelParams = do xs <- CL.take (Parallel.batchSize parallelParams)
+                                        unless (L.null xs) (do ptrs <- liftIO . MP.mapM (getFeatureVecPtr . Sparse. VU.toList) $ xs
+                                                               sourceList ptrs
+                                                               featurePointConduit parallelParams)
 
 main =
   do args <- getArgs
@@ -42,9 +42,11 @@ main =
      params <- parseArgs args
      header <- readPVPHeader . P.head $ pvpFile params
      gmm <- readGMM (gmmFile params) :: IO [GMM]
+     muVarList <- decodeFile (muVarFile params)
      let parallelParams =
            ParallelParams (Parser.numThread params)
                           (Parser.batchSize params)
+         muVar = VU.fromList muVarList
      print params
      runResourceT $
        pvpFileSource (P.head $ pvpFile params) $$
@@ -56,10 +58,10 @@ main =
          undefined =$= mapP
                          parallelParams
                          (poolGrid
-                            (poolingSize params)
-                            (poolingStride params)
-                            (fisherVector (P.head gmm) . extractFeaturePoint)) =$= 
-       featurePointConduit =$=
+                            (div ((nx header) - (poolingSize params) + 1) (poolingStride params))
+                            (div ((nx header) - (poolingSize params) + 1) (poolingStride params))
+                            (fisherVector (P.head gmm) muVar . extractFeaturePoint)) =$= 
+       featurePointConduit parallelParams =$=
        mergeSource (labelSource $ labelFile params) =$=
        predict (modelName params)
                ((modelName params) P.++ ".out")
