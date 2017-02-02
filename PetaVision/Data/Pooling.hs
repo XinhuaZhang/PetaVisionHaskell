@@ -6,6 +6,7 @@ module PetaVision.Data.Pooling
   , poolVecConduit1
   , poolArrayConduit
   , poolGrid
+  , poolGridList
   , gridNum
   ) where
 
@@ -470,6 +471,24 @@ poolArrayConduit parallelParams poolingType poolingSize offset = do
             fromUnboxed (Z :. nf' :. newNy :. newNx) . VU.concat . L.concat $
             pooledList'
       in deepSeqArray result result
+      
+{-# INLINE poolGrid #-}
+
+poolGridList
+  :: (R.Source s e, Unbox e)
+  => Int
+  -> Int
+  -> (R.Array D DIM3 e -> VU.Vector e)
+  -> R.Array s DIM3 e
+  -> [VU.Vector e]
+poolGridList poolSize stride f arr =
+  [ f . cropUnsafe [0, i, j] [nf', poolSize, poolSize] $ arr
+  | i <- startPointList nx'
+  , j <- startPointList ny' ]
+  where
+    (Z :. ny' :. nx' :. nf') = extent arr
+    startPointList len =
+      L.filter (\i -> i + poolSize <= len) [0,stride .. len - 1]
 
 poolGrid
   :: (R.Source s e, Unbox e)
@@ -478,16 +497,7 @@ poolGrid
   -> (R.Array D DIM3 e -> VU.Vector e)
   -> R.Array s DIM3 e
   -> VU.Vector e
-poolGrid poolSize stride f arr =
-  VU.concat [f .
-             cropUnsafe [0,i,j]
-                        [nf',poolSize,poolSize] $
-             arr|i <- startPointList nx',j <- startPointList ny']
-  where (Z :. ny' :. nx' :. nf') = extent arr
-        startPointList len =
-          L.filter (\i -> i + poolSize <= len)
-                   [0,stride .. len - 1]
-
+poolGrid poolSize stride f = VU.concat . poolGridList poolSize stride f 
 
 
 gridNum :: Int -> Int -> Int -> Int -> Int
