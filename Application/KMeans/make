@@ -1,0 +1,10 @@
+#!/bin/bash
+
+FLAG="--make -O2 -rtsopts -j4 -threaded -funbox-strict-fields -XBangPatterns -funbox-strict-fields" #
+LIBS="-lgomp -lstdc++ -lblas"
+OBJPATH="../../Classifier/LibLinear/"
+
+
+cabal exec -- ghc $FLAG $LIBS -i../../ TrainKMeans.hs -o trainKMeans &
+cabal exec -- ghc $FLAG $LIBS -i../../ PlotCenter.hs -o plotCenter &
+wait
