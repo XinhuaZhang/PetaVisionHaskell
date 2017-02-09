@@ -36,11 +36,11 @@ gaussian :: Gaussian -> VU.Vector Double -> Double
 gaussian (Gaussian mu' sigma2') xs =
   (VU.product .
    VU.zipWith3
-     (\m s x -> (exp (-0.5 * (x - m) ^ (2 :: Int) / s)) / sqrt s)
+     (\m s x -> (exp (-0.5 * (x - m) ^ (2 :: Int) / s)) / sqrt (s * 2 * pi))
      mu'
      sigma2' $
-   xs) /
-  (sqrt $! (2 * pi) ^ (VU.length mu'))
+   xs) -- /
+      -- (sqrt $! (2 * pi) ^ (VU.length mu'))
 
 {-# INLINE randomGaussian #-}
 
@@ -54,3 +54,13 @@ randomGaussian bound = do
   where
     (boundMu, boundSigma) = L.unzip bound
     len = L.length bound
+
+
+gaussianTest :: Gaussian -> VU.Vector Double -> [Double]
+gaussianTest (Gaussian mu' sigma2') xs =
+  VU.toList .
+  VU.zipWith3
+    (\m s x -> (exp (-0.5 * (x - m) ^ (2 :: Int) / s)) / sqrt (s * 2 * pi))
+    mu'
+    sigma2' $
+  xs

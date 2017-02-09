@@ -55,12 +55,19 @@ main =
                          (Parser.batchSize params))
          (poolingType params)
          (poolingSize params)
-         undefined =$= mapP
-                         parallelParams
-                         (poolGrid
-                            (div ((nx header) - (poolingSize params) + 1) (poolingStride params))
-                            (div ((nx header) - (poolingSize params) + 1) (poolingStride params))
-                            (fisherVector (P.head gmm) muVar . extractFeaturePoint)) =$= 
+         undefined =$=
+       mapP parallelParams
+            (poolGridList 3
+                          1
+                          (toUnboxed . R.computeS)) =$=
+       mapP parallelParams
+            (poolGrid (div ((nx header) - (poolingSize params) + 1)
+                           (poolingStride params))
+                      (div ((nx header) - (poolingSize params) + 1)
+                           (poolingStride params))
+                      (fisherVector (P.head gmm)
+                                    muVar .
+                       extractFeaturePoint)) =$=
        featurePointConduit parallelParams =$=
        mergeSource (labelSource $ labelFile params) =$=
        predict (modelName params)

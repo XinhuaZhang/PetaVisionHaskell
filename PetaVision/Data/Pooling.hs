@@ -44,7 +44,7 @@ maxPoolList :: (Ord a)
             => Int -> ([a] -> a) -> [a] -> [a]
 maxPoolList poolSize maxOp ys@(x:xs)
   | P.length as == poolSize = max : maxPoolList poolSize maxOp xs
-  | otherwise = [max]
+  | otherwise = []
   where (as,bs) = P.splitAt poolSize ys
         max = maxOp as
 
@@ -124,7 +124,7 @@ maxPoolVec poolSize maxOp ys
     maxPoolVec poolSize
                maxOp
                (V.tail ys)
-  | otherwise = [max]
+  | otherwise = []
   where (as,bs) = V.splitAt poolSize ys
         max = maxOp as
 

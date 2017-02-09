@@ -35,8 +35,8 @@ main =
         --   (poolingSize params)
         --   undefined =$=
         CL.map pvpOutputData2Array =$=
-        mapP parallelParams (poolGridList (poolingSize params) 1 (toUnboxed . R.computeS)) =$=
-        -- mapP parallelParams extractFeaturePoint =$=
+        -- mapP parallelParams (poolGridList 3 1 (toUnboxed . R.computeS)) =$=
+        mapP parallelParams extractFeaturePoint =$=
         gmmSink parallelParams
                 (gmmFile params)
                 (muVarFile params)

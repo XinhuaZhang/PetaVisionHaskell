@@ -27,7 +27,7 @@ fisherVectorMu gmm xs =
     assignments
     xs
   where
-    assignments = getAssignmentVec gmm xs
+    assignments = getAssignmentVec' gmm xs
 
 fisherVectorSigma :: GMM
                   -> [VU.Vector Double]
@@ -51,8 +51,8 @@ fisherVectorSigma gmm xs =
     assignments
     xs
   where
-    assignments = getAssignmentVec gmm xs
-    
+    assignments = getAssignmentVec' gmm xs
+
 {-# INLINE fisherVector #-}
 
 fisherVector :: GMM -> VU.Vector (Double,Double) -> [VU.Vector Double] -> VU.Vector Double

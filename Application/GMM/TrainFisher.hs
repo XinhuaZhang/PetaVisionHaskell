@@ -100,7 +100,7 @@ main = do
       (ParallelParams (Parser.numThread params) (Parser.batchSize params))
       (poolingType params)
       (poolingSize params)
-      undefined =$=
+      undefined =$= mapP parallelParams (poolGridList 3 1 (toUnboxed . R.computeS)) =$=
     mapP
       parallelParams
       (poolGrid
