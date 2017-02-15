@@ -12,6 +12,7 @@ import           PetaVision.Data.Pooling
 import           PetaVision.Utility.Parallel          as PA
 import           Prelude                              as P
 import           System.Environment
+import           Control.Monad.Trans.Resource
 
 main =
   do args <- getArgs
@@ -42,23 +43,25 @@ main =
      if poolingFlag params
         then do putStrLn $
                   "Using CPU for " ++ show (poolingType params) ++ " Pooling"
-                sequenceSources
-                  (P.zipWith (\s offset ->
-                                s =$=
-                                poolVecConduit
-                                  (ParallelParams (AP.numThread params)
-                                                  (AP.batchSize params))
-                                  (poolingType params)
-                                  (poolingSize params)
-                                  offset)
-                             source
-                             (snd . unzip $ dims)) $$
+                runResourceT $
+                  sequenceSources
+                    (P.zipWith (\s offset ->
+                                  s =$=
+                                  poolVecConduit
+                                    (ParallelParams (AP.numThread params)
+                                                    (AP.batchSize params))
+                                    (poolingType params)
+                                    (poolingSize params)
+                                    offset)
+                               source
+                               (snd . unzip $ dims)) $$
                   concatPooledConduit =$
                   trainSink trainParams
                             (labelFile params)
                             (AP.batchSize params)
                             (findC params)
-        else sequenceSources source $$ concatConduit (snd . unzip $ dims) =$
+        else runResourceT $
+             sequenceSources source $$ concatConduit (snd . unzip $ dims) =$
              trainSink trainParams
                        (labelFile params)
                        (AP.batchSize params)

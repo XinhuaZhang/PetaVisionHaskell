@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Application.GMM.ArgsParser where
+module Application.KMeans.ArgsParser where
 
 import           Data.Maybe
 import           PetaVision.Data.Pooling
@@ -19,7 +19,7 @@ data Flag
   | BatchSize Int
   | PoolingSize Int
   | NumGaussian Int
-  | GMMFile String
+  | KMeansFile String
   | Threshold Double
   | PoolingStride Int
   | MuVarFile String
@@ -37,7 +37,7 @@ data Params =
          ,batchSize     :: Int
          ,poolingSize   :: Int
          ,numGaussian   :: Int
-         ,gmmFile       :: String
+         ,kmeansFile       :: String
          ,threshold     :: Double
          ,poolingStride :: Int
          ,muVarFile     :: String}
@@ -84,10 +84,10 @@ options =
   ,Option ['n']
           ["numGaussian"]
           (ReqArg (\x -> NumGaussian $ readInt x) "INT")
-          "Set the number of Gaussian in GMM."
+          "Set the number of Gaussian in KMeans."
   ,Option ['z']
-          ["GMMFile"]
-          (ReqArg GMMFile "FILE")
+          ["KMeansFile"]
+          (ReqArg KMeansFile "FILE")
           "Tree data file."
   ,Option ['h']
           ["threshold"]
@@ -136,7 +136,7 @@ parseFlag flags = go flags defaultFlag
                  ,batchSize = 1
                  ,poolingSize = 3
                  ,numGaussian = 1
-                 ,gmmFile = "gmm.dat"
+                 ,kmeansFile = "kmeans.dat"
                  ,threshold = 0.01
                  ,poolingStride = 1
                  ,muVarFile = ""}
@@ -155,7 +155,7 @@ parseFlag flags = go flags defaultFlag
             BatchSize x -> go xs (params {batchSize = x})
             PoolingSize n -> go xs (params {poolingSize = n})
             NumGaussian n -> go xs (params {numGaussian = n})
-            GMMFile str -> go xs (params {gmmFile = str})
+            KMeansFile str -> go xs (params {kmeansFile = str})
             Threshold v -> go xs (params {threshold = v})
             PoolingStride n -> go xs (params {poolingStride = n})
             MuVarFile str -> go xs (params {muVarFile = str})

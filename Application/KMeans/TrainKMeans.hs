@@ -1,8 +1,5 @@
-module Main where
-
-import           Application.GMM.ArgsParser   as Parser
-import           Application.GMM.Conduit
-import           Application.GMM.GMM
+import           Application.KMeans.ArgsParser   as Parser
+import           Application.KMeans.Conduit
 import           Control.Monad.Trans.Resource
 import           Data.Array.Repa              as R
 import           Data.Conduit
@@ -36,10 +33,4 @@ main =
         --   undefined =$=
         CL.map pvpOutputData2Array =$=
         -- mapP parallelParams (poolGridList 3 1 (toUnboxed . R.computeS)) =$=
-        mapP parallelParams extractFeaturePoint =$=
-        gmmSink parallelParams
-                (gmmFile params)
-                (muVarFile params)
-                (numGaussian params)
-                (threshold params)
-                100)
+        kmeansArrSink (kmeansFile params) (numGaussian params) 100 1)
