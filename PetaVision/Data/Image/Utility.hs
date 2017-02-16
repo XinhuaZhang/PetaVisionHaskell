@@ -39,8 +39,8 @@ rescaleImage2D (newNy, newNx) bound arr =
   where
     ds = computeDerivativeS . computeUnboxedS . delay $ arr
     (Z :. ny' :. nx') = extent arr
-    ratioX = fromIntegral (newNx - 1) / fromIntegral (nx' - 1)
-    ratioY = fromIntegral (newNy - 1) / fromIntegral (ny' - 1)
+    ratioX = fromIntegral (nx' - 1) / fromIntegral (newNx - 1) 
+    ratioY = fromIntegral (ny' - 1) / fromIntegral (newNy - 1) 
 
 {-# INLINE rescaleImage25D #-}
 

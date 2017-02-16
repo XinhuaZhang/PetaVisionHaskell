@@ -280,9 +280,9 @@ putPVPHeader :: PVPHeader -> Put
 putPVPHeader header =
   case fileType header of
     4 -> do
-      putWord32le 80
       putWord32le . fromIntegral . headerSize $ header
       putWord32le . fromIntegral . numParams $ header
+      putWord32le . fromIntegral . fileType $ header
       putWord32le . fromIntegral . nx $ header
       putWord32le . fromIntegral . ny $ header
       putWord32le . fromIntegral . nf $ header
