@@ -5,6 +5,5 @@ LIBS="-lgomp -lstdc++ -lblas"
 OBJPATH="../../Classifier/LibLinear/"
 
 
-cabal exec -- ghc $FLAG $LIBS -i../../ TrainKMeans.hs -o trainKMeans &
-cabal exec -- ghc $FLAG $LIBS -i../../ PlotCenter.hs -o plotCenter &
-wait
+cabal exec -- ghc $FLAG $LIBS -i../../ TrainKMeans.hs -o trainKMeans
+cabal exec -- ghc $FLAG $LIBS -i../../ PlotCenter.hs -o plotCenter

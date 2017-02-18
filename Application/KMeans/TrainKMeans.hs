@@ -32,5 +32,8 @@ main =
         --   (poolingSize params)
         --   undefined =$=
         CL.map pvpOutputData2Array =$=
-        -- mapP parallelParams (poolGridList 3 1 (toUnboxed . R.computeS)) =$=
-        kmeansArrSink (kmeansFile params) (numGaussian params) 100 1)
+        mapP parallelParams (poolGridList 3 1 (toUnboxed . R.computeS)) =$=
+        kmeansVecSinkP parallelParams (kmeansFile params) (numGaussian params) 500 1 (threshold params)) 
+        -- kmeansVecSink (kmeansFile params) (numGaussian params) 1)
+        -- kmeansArrSinkP parallelParams (kmeansFile params) (numGaussian params) 100 1 (threshold params)) 
+
