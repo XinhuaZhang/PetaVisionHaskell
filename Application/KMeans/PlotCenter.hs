@@ -1,24 +1,25 @@
 {-# LANGUAGE FlexibleContexts #-}
 import           Application.KMeans.ArgsParser as Parser
-import           PetaVision.Utility.Array
-import           PetaVision.Utility.Parallel
-import           Application.PlotWeight.Grid
 import           Application.KMeans.Conduit
+import           Application.PlotWeight.Grid
 import           Codec.Picture
 import           Control.Monad                 as M
 import           Control.Monad.Trans.Resource
 import           Data.Array.Repa               as R
 import           Data.Array.Unboxed            as AU
+import           Data.Binary
 import           Data.Conduit
 import           Data.Conduit.List             as CL
 import           Data.List                     as L
+import           Data.Vector                   as V
 import           Data.Vector.Unboxed           as VU
-import           Data.Vector           as V
 import           PetaVision.Data.Convolution
+import           PetaVision.Data.KMeans        as KMP
 import           PetaVision.Data.Weight
 import           PetaVision.PVPFile.IO
+import           PetaVision.Utility.Array
+import           PetaVision.Utility.Parallel
 import           System.Environment
-import           PetaVision.Data.KMeans as KMP
 
 {-# INLINE uArray2RepaArray3 #-}
 
@@ -29,7 +30,7 @@ uArray2RepaArray3 arr =
        (Z :. (ub1 - lb1 + 1) :. (ub2 - lb2 + 1) :. (ub3 - lb3 + 1)) .
      elems $
      arr
-     
+
 {-# INLINE repaArray2UArray2 #-}  
 
 repaArray2UArray2
@@ -38,7 +39,7 @@ repaArray2UArray2
 repaArray2UArray2 arr =
   let (Z :. ny' :. nx') = extent arr
   in listArray ((0, 0), (ny' - 1, nx' - 1)) . R.toList $ arr
-  
+
 
 {-# INLINE repaArray2UArray3 #-}  
 
@@ -51,11 +52,11 @@ repaArray2UArray3 arr =
 
 main =
   do (kmeansFile:weightFile:_) <- getArgs
-     kmeansModel <- readKMeansCenter kmeansFile
-     -- kmeansModel' <- readKMeansModel kmeansFile
+     (KMeansModel (KMP.Shape actNy actNx actNf stride) cs kmeansModel) <-
+       decodeFile kmeansFile
      weight <- runResourceT $ pvpFileSource weightFile $$ CL.head
-     let (actNy,actNx,actNf) = (3,3,48) :: (Int,Int,Int)
-         -- kmeansModel = V.fromList . L.map VU.fromList $ kmeansModel'
+     let sortedPairs =
+           L.reverse . L.sortOn fst . V.toList $ V.zip cs kmeansModel
          xs =
            L.map (\x' ->
                     let arr' =
@@ -63,13 +64,11 @@ main =
                                       x'
                     in L.map (\i -> R.slice arr' (Z :. All :. All :. i))
                              [0 .. actNf - 1]) .
-           V.toList $
-           kmeansModel
+           L.map snd $ sortedPairs
          isConvolution =
            if actNy == 1
               then False
               else True
-         stride = 1
      case weight of
        Nothing -> error "Read weight error"
        Just (PVP_OUTPUT_KERNEL w) ->
@@ -105,8 +104,7 @@ main =
                                                  const
                                                  (\fw fmu idx@(Z :. _j :. _i :. _k :. n) ->
                                                     fw idx * fmu (Z :. n))) .
-                          V.toList $
-                          kmeansModel
+                          L.map snd $ sortedPairs
             savePngImage
               "dictionary.png"
               (getGridImage $
@@ -120,3 +118,4 @@ main =
                L.foldl1' R.append .
                L.map (R.extend (Z :. All :. All :. All :. (1 :: Int))) $
                ys)
+            M.mapM_ print . L.map fst $ sortedPairs

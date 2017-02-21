@@ -2,33 +2,67 @@
 {-# LANGUAGE DeriveGeneric #-}
 
 module PetaVision.Data.KMeans
-  ( ClusterCenter
-  , kmeans
-  , computeSoftAssignment
-  , writeKMeansCenter
-  , readKMeansCenter
-  ) where
+  (ClusterCenter
+  ,Shape(..)
+  ,KMeansModel(..)
+  ,kmeans
+  ,computeSoftAssignment)
+  where
 
 import           Control.Arrow               ((&&&))
+import           Control.Monad               as M
 import           Data.Binary
 import           Data.List                   as L
 import           Data.Vector                 as V
 import           Data.Vector.Unboxed         as VU
+import           GHC.Generics
 import           PetaVision.Utility.Parallel
 import           System.Random
-import           Control.Monad as M
+
+data Shape =
+  Shape {rows     :: Int
+        ,cols     :: Int
+        ,channels :: Int
+        ,stride   :: Int}
+  deriving (Show,Generic)
+
+instance Binary Shape where
+  put (Shape r c ch st) =
+    do put r
+       put c
+       put ch
+       put st
+  get =
+    do r <- get
+       c <- get
+       ch <- get
+       st <- get
+       return $! Shape r c ch st
 
 type ClusterCenter = V.Vector (VU.Vector Double)
 
-type Assignment = V.Vector Int
+data KMeansModel =
+  KMeansModel {shape       :: Shape
+              ,clusterSize :: V.Vector Int
+              ,center      :: ClusterCenter
+              }
 
--- randomClusterCenter :: Int -> [VU.Vector Double] -> IO (ClusterCenter,VU.Vector (Double,Double))
--- randomClusterCenter k xs =
---   do center <- V.replicateM k . VU.mapM randomRIO $ bound
---      return (center,bound)
---   where bound =
---           VU.fromList .
---           L.map (L.minimum &&& L.maximum) . L.transpose . L.map VU.toList $ xs
+instance Binary KMeansModel where
+  put (KMeansModel sh cs c) =
+    do put sh
+       put . V.toList $ cs
+       put . L.map VU.toList . V.toList $ c
+  get =
+    do sh <- get
+       cs <- get
+       xs <- get
+       return $!
+         KMeansModel sh
+                     (V.fromList cs) .
+         V.fromList . L.map VU.fromList $
+         xs
+
+type Assignment = V.Vector Int
 
 randomClusterCenterPP :: [VU.Vector Double]
                       -> Int
@@ -89,27 +123,38 @@ randomClusterCenterPP !centers !n xs =
         else randomClusterCenterPP (center : centers)
                                    (n - 1)
                                    xs
-     
+
+{-# INLINE computeAssignmentP #-}
 
 computeAssignmentP :: ClusterCenter
                    -> [V.Vector (VU.Vector Double)]
                    -> [Assignment]
 computeAssignmentP = parMap rdeepseq . computeAssignment
 
-computeMeanP
-  :: Int
-  -> Int
-  -> [Assignment]
-  -> [V.Vector (VU.Vector Double)]
-  -> [V.Vector (VU.Vector Double)]
-computeMeanP k nf = parZipWith rdeepseq (computeMean k nf)
+{-# INLINE computeMeanP #-}
+
+computeMeanP :: Int
+             -> Int
+             -> [Assignment]
+             -> [V.Vector (VU.Vector Double)]
+             -> [V.Vector (VU.Vector Double)]
+computeMeanP k nf =
+  parZipWith rdeepseq
+             (computeMean k nf)
+
+{-# INLINE computeDistortionP #-}
 
 computeDistortionP :: ClusterCenter
                    -> [Assignment]
                    -> [V.Vector (VU.Vector Double)]
                    -> Double
 computeDistortionP clusterCenter assignments =
-  L.sum . parZipWith rdeepseq (computeDistortion clusterCenter) assignments
+  L.sum .
+  parZipWith rdeepseq
+             (computeDistortion clusterCenter)
+             assignments
+
+{-# INLINE meanList2ClusterCenter #-}
 
 meanList2ClusterCenter :: [V.Vector (VU.Vector Double)]
                        -> [V.Vector (VU.Vector Double)]
@@ -141,8 +186,22 @@ meanList2ClusterCenter vecs xss =
         nf = VU.length . V.head . L.head $ vecs
         k = V.length . L.head $ vecs
 
-kmeans :: ParallelParams -> Int -> Double -> [VU.Vector Double] -> IO ClusterCenter
-kmeans parallelParams k threshold xs =
+computeClusterSize
+  :: Int -> [Assignment] -> V.Vector Int
+computeClusterSize k xs =
+  V.accumulate (+)
+               (V.replicate k 0) $
+  V.zip vec
+        (V.replicate (V.length vec)
+                     1)
+  where vec = V.concat xs
+
+kmeans :: ParallelParams
+       -> Int
+       -> Shape
+       -> [VU.Vector Double]
+       -> IO KMeansModel
+kmeans parallelParams k sh xs =
   do randomCenter <- randomClusterCenterPP [] k ys
      go (V.fromListN k randomCenter)
         (fromIntegral (maxBound :: Int)) $
@@ -156,13 +215,16 @@ kmeans parallelParams k threshold xs =
         go !center lastDistortion zs =
           do let assignment = computeAssignmentP center zs
                  distortion = computeDistortionP center assignment zs
-             newCenter <-
-               meanList2ClusterCenter (computeMeanP k nf assignment zs)
-                                      zs
              print distortion
              if distortion >= lastDistortion
-                then return center
-                else go newCenter distortion zs
+                then return $!
+                     KMeansModel sh
+                                 (computeClusterSize k assignment)
+                                 center
+                else do newCenter <-
+                          meanList2ClusterCenter (computeMeanP k nf assignment zs)
+                                                 zs
+                        go newCenter distortion zs
 
 computeSoftAssignment :: ParallelParams
                       -> ClusterCenter
@@ -173,38 +235,30 @@ computeSoftAssignment parallelParams center =
     parallelParams
     rdeepseq
     (\x ->
-        let dist = V.map (distFunc x) center
-            mean = V.sum dist / fromIntegral (V.length center)
-        in V.convert . V.map (\y -> max 0 (mean - y)) $ dist)
-
-
-writeKMeansCenter :: FilePath -> ClusterCenter -> IO ()
-writeKMeansCenter filePath = encodeFile filePath . V.toList . V.map VU.toList
-
-readKMeansCenter :: FilePath -> IO ClusterCenter
-readKMeansCenter filePath = do
-  xs <- decodeFile filePath
-  return . V.fromList . L.map VU.fromList $ xs
+       let dist = V.map (distFunc x) center
+           mean = V.sum dist / fromIntegral (V.length center)
+       in V.convert . V.map (\y -> max 0 (mean - y)) $ dist)
 
 {-# INLINE computeAssignment #-}
 
-computeAssignment :: ClusterCenter -> V.Vector (VU.Vector Double) -> Assignment
+computeAssignment
+  :: ClusterCenter -> V.Vector (VU.Vector Double) -> Assignment
 computeAssignment cluster =
   V.map (\x -> V.minIndex . V.map (distFunc x) $ cluster)
 
 {-# INLINE computeMean #-}
 
-computeMean
-  :: Int
-  -> Int
-  -> Assignment
-  -> V.Vector (VU.Vector Double)
-  -> V.Vector (VU.Vector Double)
+computeMean :: Int
+            -> Int
+            -> Assignment
+            -> V.Vector (VU.Vector Double)
+            -> V.Vector (VU.Vector Double)
 computeMean k nf assignmet =
-  V.map (\(s, count) -> VU.map (/ count) s) .
+  V.map (\(s,count) -> VU.map (/ count) s) .
   V.accumulate
-    (\(s, count) vec -> (VU.zipWith (+) s vec, count + 1))
-    (V.replicate k (VU.replicate nf 0, 0)) .
+    (\(s,count) vec -> (VU.zipWith (+) s vec,count + 1))
+    (V.replicate k
+                 (VU.replicate nf 0,0)) .
   V.zip assignmet
 
 {-# INLINE computeDistortion #-}
@@ -219,15 +273,17 @@ computeDistortion clusterCenter assignments =
 
 {-# INLINE distFunc #-}
 
-distFunc :: VU.Vector Double -> VU.Vector Double -> Double
-distFunc vec1 vec2 = VU.sum $ VU.zipWith (\a b -> (a - b) ^ (2 :: Int)) vec1 vec2
+distFunc
+  :: VU.Vector Double -> VU.Vector Double -> Double
+distFunc vec1 vec2 =
+  VU.sum $
+  VU.zipWith (\a b -> (a - b) ^ (2 :: Int))
+             vec1
+             vec2
 
 {-# INLINE splitList #-}
 
 splitList :: Int -> [a] -> [[a]]
-splitList _ []
- = []
+splitList _ [] = []
 splitList n ys = as : splitList n bs
-  where
-    (as, bs) = L.splitAt n ys
-
+  where (as,bs) = L.splitAt n ys

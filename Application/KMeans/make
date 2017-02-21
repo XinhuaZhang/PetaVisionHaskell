@@ -1,6 +1,6 @@
 #!/bin/bash
 
-FLAG="--make -O2 -rtsopts -j4 -threaded -funbox-strict-fields -XBangPatterns -funbox-strict-fields" #
+FLAG="--make -O2 -rtsopts -j4 -threaded -funbox-strict-fields -fno-liberate-case -funfolding-use-threshold1000 -funfolding-keeness-factor1000 -fllvm -optlo-O3 -XBangPatterns" #
 LIBS="-lgomp -lstdc++ -lblas"
 OBJPATH="../../Classifier/LibLinear/"
 

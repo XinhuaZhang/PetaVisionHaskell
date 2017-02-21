@@ -472,7 +472,7 @@ poolArrayConduit parallelParams poolingType poolingSize offset = do
             pooledList'
       in deepSeqArray result result
       
-{-# INLINE poolGrid #-}
+{-# INLINE poolGridList #-}
 
 poolGridList
   :: (R.Source s e, Unbox e)
@@ -489,6 +489,8 @@ poolGridList poolSize stride f arr =
     (Z :. ny' :. nx' :. nf') = extent arr
     startPointList len =
       L.filter (\i -> i + poolSize <= len) [0,stride .. len - 1]
+
+{-# INLINE poolGrid #-}
 
 poolGrid
   :: (R.Source s e, Unbox e)
