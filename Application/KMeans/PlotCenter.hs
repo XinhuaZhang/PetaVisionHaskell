@@ -118,4 +118,4 @@ main =
                L.foldl1' R.append .
                L.map (R.extend (Z :. All :. All :. All :. (1 :: Int))) $
                ys)
-            M.mapM_ print . L.map fst $ sortedPairs
+            M.mapM_ print . L.zip [1..] . L.map fst $ sortedPairs

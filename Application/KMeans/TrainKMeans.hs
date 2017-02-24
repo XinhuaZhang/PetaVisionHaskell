@@ -26,23 +26,41 @@ main =
            ParallelParams (Parser.numThread params)
                           (Parser.batchSize params)
          stride = 2
-         sh = KMP.Shape (poolingSize params) (poolingSize params) (nf header) stride
+         sh =
+           KMP.Shape (poolingSize params)
+                     (poolingSize params)
+                     (nf header)
+                     stride
      print params
-     runResourceT
-       (pvpFileSource (P.head $ pvpFile params) $$
-        -- poolArrayConduit
-        --   (ParallelParams (Parser.numThread params) (Parser.batchSize params))
-        --   (poolingType params)
-        --   (poolingSize params)
-        --   undefined =$=
-        CL.map pvpOutputData2Array =$=
-        mapP parallelParams
-             (poolGridList (poolingSize params)
-                           (poolingStride params)
-                           (toUnboxed . R.computeS)) =$=
-        kmeansVecSinkP parallelParams
-                       (kmeansFile params)
-                       (numGaussian params)
-                       100
-                       sh)-- kmeansVecSink (kmeansFile params) (numGaussian params) 1)
-                          -- kmeansArrSinkP parallelParams (kmeansFile params) (numGaussian params) 100 1 (threshold params))
+     arrs <-
+       runResourceT $
+       pvpFileSource (P.head $ pvpFile params) $$ CL.map pvpOutputData2Array =$=
+       CL.take 10000
+     runResourceT $
+       sourceList arrs $$
+       mapP parallelParams
+            (poolGridList (poolingSize params)
+                          (poolingStride params)
+                          (toUnboxed . R.computeS)) =$=
+       kmeansVecSinkP parallelParams
+                      (kmeansFile params)
+                      (numGaussian params)
+                      10000
+                      sh-- runResourceT
+                        --   (pvpFileSource (P.head $ pvpFile params) $$
+                        --    -- poolArrayConduit
+                        --    --   (ParallelParams (Parser.numThread params) (Parser.batchSize params))
+                        --    --   (poolingType params)
+                        --    --   (poolingSize params)
+                        --    --   undefined =$=
+                        --    CL.map pvpOutputData2Array =$=
+                        --    mapP parallelParams
+                        --         (poolGridList (poolingSize params)
+                        --                       (poolingStride params)
+                        --                       (toUnboxed . R.computeS)) =$=
+                        --    kmeansVecSinkP parallelParams
+                        --                   (kmeansFile params)
+                        --                   (numGaussian params)
+                        --                   100
+                        --                   sh)-- kmeansVecSink (kmeansFile params) (numGaussian params) 1)
+                        --                      -- kmeansArrSinkP parallelParams (kmeansFile params) (numGaussian params) 100 1 (threshold params))
