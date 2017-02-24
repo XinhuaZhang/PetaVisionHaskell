@@ -1,6 +1,8 @@
 module Main where
 
 import           Codec.Picture
+import           Control.Monad          as M
+import           Control.Monad.Parallel as MP
 import           Data.Array.Repa        as R
 import           Data.Conduit
 import           Data.Conduit.List      as CL
@@ -11,12 +13,11 @@ import           PetaVision.PVPFile.IO
 import           Prelude                as P
 import           System.Directory
 import           System.Environment
-import Control.Monad as M
-import Control.Monad.Parallel as MP
+import           Control.Monad.Trans.Resource
 
 main = do
   reconFiles <- getArgs
-  recons <- P.mapM (\reconFile -> pvpFileSource reconFile $$ CL.head) reconFiles
+  recons <- P.mapM (\reconFile -> runResourceT $ pvpFileSource reconFile $$ CL.head) reconFiles
   dir <- getCurrentDirectory
   createDirectoryIfMissing True (dir P.++ "/Recon")
   if P.any isNothing recons

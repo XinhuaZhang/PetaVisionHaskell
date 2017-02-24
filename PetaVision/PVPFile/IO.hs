@@ -6,105 +6,27 @@ module PetaVision.PVPFile.IO
   , readPVPHeader
   , pvpFileSource
   , pvpOutputData2Array
+  , hPutPVPHeader
+  , writePVPFileConduit
   ) where
 
-import           Control.DeepSeq
 import           Control.Monad                 as M
 import           Control.Monad.IO.Class
 import           Control.Monad.Trans.Resource
 import           Data.Array.Repa               as R
 import           Data.Binary.Get
+import           Data.Binary.Put
 import qualified Data.ByteString               as BS
 import qualified Data.ByteString.Lazy          as BL
 import qualified Data.ByteString.Lazy.Internal as BL
 import           Data.Conduit                  as C
+import           Data.Conduit.Binary           as CB
 import           Data.List                     as L
 import           Data.Vector.Unboxed           as VU
 import           GHC.Float
+import           PetaVision.PVPFile.Types
 import           Prelude                       as P
 import           System.IO
-
-data PVPHeader = PVPHeader
-  { headerSize   :: Int
-  , numParams    :: Int
-  , fileType     :: Int
-  , nx           :: Int
-  , ny           :: Int
-  , nf           :: Int
-  , numRecords   :: Int
-  , recordSize   :: Int
-  , dataSize     :: Int
-  , dataType     :: Int
-  , nxProcs      :: Int
-  , nyProcs      :: Int
-  , nxGlobal     :: Int
-  , nyGlobal     :: Int
-  , kx           :: Int
-  , ky           :: Int
-  , nb           :: Int
-  , nBands       :: Int
-  , time         :: Double
-  , weightHeader :: PVPWeightHeader
-  } deriving (Show)
-
-data PVPWeightHeader = PVPWeightHeader
-  { nxp        :: Int
-  , nyp        :: Int
-  , nfp        :: Int
-  , wMin       :: Double
-  , wMax       :: Double
-  , numPatches :: Int
-  } deriving (Show)
-
-data PVPFileType
-  = PVP_FILE
-  | PVP_ACT_FILE
-  | PVP_WGT_FILE
-  | PVP_NONSPIKING_ACT_FILE
-  | PVP_KERNEL_FILE
-  | PVP_ACT_SPARSEVALUES_FILE
-  deriving (Show, Eq)
-
-data PVPDataType
-  = PV_BYTE
-  | PV_INT
-  | PV_FLOAT
-  | PV_SPARSEVALUES
-  deriving (Show)
-
-data PVPDimension = PVPDimension
-  { outputNx :: !Int
-  , outputNy :: !Int
-  , outputNf :: !Int
-  } deriving (Show)
-
-instance NFData PVPDimension where
-  rnf (PVPDimension a b c) = a `seq` b `seq` c `seq` ()
-
-data PVPOutputData
-  = PVP_OUTPUT_ACT !PVPDimension
-                   ![Int]
-  | PVP_OUTPUT_NONSPIKING_ACT !PVPDimension
-                              !(VU.Vector Double)
-  | PVP_OUTPUT_ACT_SPARSEVALUES !PVPDimension
-                                !(VU.Vector (Int, Double))
-  | PVP_OUTPUT_KERNEL !(Array U DIM4 Double)
-  deriving (Show)
-
-instance NFData PVPOutputData where
-  rnf x =
-    case x of
-      PVP_OUTPUT_ACT d xs              -> d `seq` xs `seq` ()
-      PVP_OUTPUT_NONSPIKING_ACT d xs   -> d `seq` xs `seq` ()
-      PVP_OUTPUT_ACT_SPARSEVALUES d xs -> d `seq` xs `seq` ()
-      PVP_OUTPUT_KERNEL arr            -> deepSeqArray arr ()
-
-data PVPFrameData
-  = FRAME_ACT !Int
-  | FRAME_NONSPIKING_ACT !Double
-  | FRAME_ACT_SPARSEVALUES !(Int, Double)
-  | FRAME_KERNEL ![Double]
-  deriving (Show)
 
 getPVPFileType :: PVPHeader -> PVPFileType
 getPVPFileType header =
@@ -352,3 +274,44 @@ pvpOutputData2Array (PVP_OUTPUT_ACT_SPARSEVALUES (PVPDimension nx' ny' nf') vec)
   accumulate (+) (VU.replicate (ny' * nx' * nf') 0) $vec
 pvpOutputData2Array _ =
   error "pvpOutputData2Array: pvpOutput format is not supported."
+
+-- Write a PVP file
+putPVPHeader :: PVPHeader -> Put
+putPVPHeader header =
+  case fileType header of
+    4 -> do
+      putWord32le 80
+      putWord32le . fromIntegral . headerSize $ header
+      putWord32le . fromIntegral . numParams $ header
+      putWord32le . fromIntegral . nx $ header
+      putWord32le . fromIntegral . ny $ header
+      putWord32le . fromIntegral . nf $ header
+      putWord32le . fromIntegral . numRecords $ header
+      putWord32le . fromIntegral . recordSize $ header
+      putWord32le . fromIntegral . dataSize $ header
+      putWord32le . fromIntegral . dataType $ header
+      putWord32le . fromIntegral . nxProcs $ header
+      putWord32le . fromIntegral . nyProcs $ header
+      putWord32le . fromIntegral . nxGlobal $ header
+      putWord32le . fromIntegral . nyGlobal $ header
+      putWord32le . fromIntegral . kx $ header
+      putWord32le . fromIntegral . ky $ header
+      putWord32le . fromIntegral . nb $ header
+      putWord32le . fromIntegral . nBands $ header
+      putDoublele . time $ header
+    _ ->
+      error $
+      "putPVPHear: Doesn't support file type " L.++ show (getPVPFileType header)
+
+hPutPVPHeader :: Handle -> PVPHeader -> IO ()
+hPutPVPHeader h = BL.hPut h . runPut . putPVPHeader
+
+putPVPFrame :: PVPOutputData -> Put
+putPVPFrame (PVP_OUTPUT_NONSPIKING_ACT _ vec) = do
+  putDoublele 0 -- time
+  VU.mapM_ (putFloatle . double2Float) vec
+putPVPFrame x =
+  error $ "putPVPFrame: PVP data type " L.++ show x L.++ " is not supported."
+
+writePVPFileConduit :: Conduit PVPOutputData (ResourceT IO) BS.ByteString
+writePVPFileConduit = awaitForever (CB.sourceLbs . runPut . putPVPFrame)

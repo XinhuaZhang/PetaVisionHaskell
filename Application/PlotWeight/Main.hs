@@ -9,10 +9,11 @@ import           PetaVision.PVPFile.IO
 import           Prelude                     as P
 import           System.Directory
 import           System.Environment
+import           Control.Monad.Trans.Resource
 
 main =
   do (weightFile:folderName:_) <- getArgs
-     weight <- pvpFileSource weightFile $$ CL.head
+     weight <- runResourceT $ pvpFileSource weightFile $$ CL.head
      dir <- getCurrentDirectory
      removePathForcibly (dir P.++ "/Weight/" P.++ folderName)
      createDirectoryIfMissing True
