@@ -4,7 +4,7 @@ included in the liblinear archive, available for download at
 <http://www.csie.ntu.edu.tw/~cjlin/liblinear/>.
 -}
 
-#include "bindings.dsl.h"
+#include <bindings.dsl.h>
 #include "linear.h"
 
 module Classifier.LibLinear.Bindings where
