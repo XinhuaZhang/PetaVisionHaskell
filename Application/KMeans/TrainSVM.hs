@@ -21,46 +21,47 @@ import           Prelude                           as P
 import           System.Environment
 import           System.IO
 
-main = do
-  args <- getArgs
-  when (L.null args) (error "run with --help to see options.")
-  params <- parseArgs args
-  header <- readPVPHeader (P.head $ pvpFile params)
-  (KMeansModel (KMP.Shape actNy actNx actNf stride) cs kmeansModel) <-
-    decodeFile (kmeansFile params)
-  let parallelParams =
-        ParallelParams (Parser.numThread params) (Parser.batchSize params)
-      trainParams =
-        TrainParams
-        { trainSolver = L2R_L2LOSS_SVC_DUAL
-        , trainC = (c params)
-        , trainNumExamples = nBands header
-        , trainFeatureIndexMax =
-          (L.length . startPointList . ny $ header) *
-          (L.length . startPointList . nx $ header) *
-          actNy *
-          actNx *
-          actNf
-        , trainModel = (modelName params)
-        }
-      startPointList len =
-        L.filter
-          (\i -> i + (poolingSize params) <= len)
-          [0,(poolingStride params) .. len - 1]
-  print params
-  runResourceT $
-    pvpFileSource (P.head $ pvpFile params) $$ CL.map pvpOutputData2Array =$=
-    mapP
-      parallelParams
-      (poolGridList
-         (poolingSize params)
-         (poolingStride params)
-         (toUnboxed . R.computeS)) =$=
-    mapP
-      parallelParams
-      (VU.zip (VU.generate (trainFeatureIndexMax trainParams) id) . computeSoftAssignment kmeansModel) =$=
-    trainSink
-      trainParams
-      [(labelFile params)]
-      (Parser.batchSize params)
-      (findC params)
+main =
+  do args <- getArgs
+     when (L.null args)
+          (error "run with --help to see options.")
+     params <- parseArgs args
+     header <- readPVPHeader (P.head $ pvpFile params)
+     (KMeansModel (KMP.Shape actNy actNx actNf stride) cs kmeansModel) <-
+       decodeFile (kmeansFile params)
+     let parallelParams =
+           ParallelParams (Parser.numThread params)
+                          (Parser.batchSize params)
+         trainParams =
+           TrainParams {trainSolver = L2R_L2LOSS_SVC_DUAL
+                       ,trainC = (c params)
+                       ,trainNumExamples = nBands header
+                       ,trainFeatureIndexMax =
+                          (L.length . startPointList . ny $ header) *
+                          (L.length . startPointList . nx $ header) *
+                          (numGaussian params)
+                       ,trainModel = (modelName params)}
+         startPointList len =
+           L.filter (\i -> i + (poolingSize params) <= len)
+                    [0,(poolingStride params) .. len - 1]
+     print params
+     print trainParams
+     runResourceT $
+       pvpFileSource (P.head $ pvpFile params) $$
+       (if (poolingFlag params)
+           then poolArrayConduit parallelParams
+                                 (poolingType params)
+                                 5
+           else CL.map pvpOutputData2Array) =$=
+       mapP parallelParams
+            (poolGridList (poolingSize params)
+                          (poolingStride params)
+                          (toUnboxed . R.computeS)) =$=
+       mapP parallelParams
+            (VU.zip (VU.generate (trainFeatureIndexMax trainParams)
+                                 (+ 1)) .
+             computeSoftAssignment kmeansModel) =$=
+       trainSink trainParams
+                 [(labelFile params)]
+                 (Parser.batchSize params)
+                 (findC params)

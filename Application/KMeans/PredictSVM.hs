@@ -21,44 +21,44 @@ import           Prelude                           as P
 import           System.Environment
 import           System.IO
 
-main = do
-  args <- getArgs
-  when (L.null args) (error "run with --help to see options.")
-  params <- parseArgs args
-  header <- readPVPHeader (P.head $ pvpFile params)
-  (KMeansModel (KMP.Shape actNy actNx actNf stride) cs kmeansModel) <-
-    decodeFile (kmeansFile params)
-  let parallelParams =
-        ParallelParams (Parser.numThread params) (Parser.batchSize params)
-      startPointList len =
-        L.filter
-          (\i -> i + (poolingSize params) <= len)
-          [0,(poolingStride params) .. len - 1]
-  print params
-  runResourceT $
-    pvpFileSource (P.head $ pvpFile params) $$ CL.map pvpOutputData2Array =$=
-    mapP
-      parallelParams
-      (poolGridList
-         (poolingSize params)
-         (poolingStride params)
-         (toUnboxed . R.computeS)) =$=
-    mapP
-      parallelParams
-      (VU.zip
-         (VU.generate
-            ((L.length . startPointList . ny $ header) *
-             (L.length . startPointList . nx $ header) *
-             actNy *
-             actNx *
-             actNf)
-            id) .
-       computeSoftAssignment kmeansModel) =$=
-    predictConduit =$=
-    mergeSource
-      (sequenceSources
-         (if L.isSuffixOf ".pvp" . labelFile $ params
-            then (P.map pvpLabelSource $ [labelFile params])
-            else (P.map labelSource $ [labelFile params])) =$=
-       CL.concat) =$=
-    predict (modelName params) "result.txt"
+main =
+  do args <- getArgs
+     when (L.null args)
+          (error "run with --help to see options.")
+     params <- parseArgs args
+     header <- readPVPHeader (P.head $ pvpFile params)
+     (KMeansModel (KMP.Shape actNy actNx actNf stride) cs kmeansModel) <-
+       decodeFile (kmeansFile params)
+     let parallelParams =
+           ParallelParams (Parser.numThread params)
+                          (Parser.batchSize params)
+         startPointList len =
+           L.filter (\i -> i + (poolingSize params) <= len)
+                    [0,(poolingStride params) .. len - 1]
+     print params
+     runResourceT $
+       pvpFileSource (P.head $ pvpFile params) $$
+       (if (poolingFlag params)
+           then poolArrayConduit parallelParams
+                                 (poolingType params)
+                                 5
+           else CL.map pvpOutputData2Array) =$=
+       mapP parallelParams
+            (poolGridList (poolingSize params)
+                          (poolingStride params)
+                          (toUnboxed . R.computeS)) =$=
+       mapP parallelParams
+            (VU.zip (VU.generate
+                       ((L.length . startPointList . ny $ header) *
+                        (L.length . startPointList . nx $ header) *
+                        (numGaussian params))
+                       (+ 1)) .
+             computeSoftAssignment kmeansModel) =$=
+       predictConduit =$=
+       mergeSource
+         (sequenceSources
+            (if L.isSuffixOf ".pvp" . labelFile $ params
+                then (P.map pvpLabelSource $ [labelFile params])
+                else (P.map labelSource $ [labelFile params])) =$=
+          CL.concat) =$=
+       predict (modelName params) "result.txt"

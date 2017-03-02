@@ -7,3 +7,6 @@ OBJPATH="../../Classifier/LibLinear/"
 
 cabal exec -- ghc $FLAG $LIBS -i../../ TrainKMeans.hs -o trainKMeans
 cabal exec -- ghc $FLAG $LIBS -i../../ PlotCenter.hs -o plotCenter
+
+cabal exec -- ghc $FLAG $LIBS -i../../ $OBJPATH/linear.o $OBJPATH/tron.o TrainSVM.hs -o trainSVM
+cabal exec -- ghc $FLAG $LIBS -i../../ $OBJPATH/linear.o $OBJPATH/tron.o PredictSVM.hs -o predictSVM

@@ -420,9 +420,8 @@ poolArrayConduit
   :: ParallelParams
   -> PoolingType
   -> Int
-  -> Int
   -> Conduit PVPOutputData (ResourceT IO) (R.Array U DIM3 Double)
-poolArrayConduit parallelParams poolingType poolingSize offset = do
+poolArrayConduit parallelParams poolingType poolingSize = do
   xs <- CL.take (batchSize parallelParams)
   unless
     (L.null xs)
@@ -458,7 +457,7 @@ poolArrayConduit parallelParams poolingType poolingSize offset = do
                     xs
                 _ -> error "poolArrayConduit: pvp file format is supported."
         sourceList pooledData
-        poolArrayConduit parallelParams poolingType poolingSize offset)
+        poolArrayConduit parallelParams poolingType poolingSize)
   where
     extractFeaturePoint nf' pooledList' =
       let newNy = L.length . L.head $ pooledList'

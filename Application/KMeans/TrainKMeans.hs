@@ -34,8 +34,13 @@ main =
      print params
      arrs <-
        runResourceT $
-       pvpFileSource (P.head $ pvpFile params) $$ CL.map pvpOutputData2Array =$=
-       CL.take 10000
+       pvpFileSource (P.head $ pvpFile params) $$
+       (if (poolingFlag params)
+           then poolArrayConduit parallelParams
+                                 (poolingType params)
+                                 5
+           else CL.map pvpOutputData2Array) =$=
+       CL.take 1000
      runResourceT $
        sourceList arrs $$
        mapP parallelParams
@@ -45,8 +50,8 @@ main =
        kmeansVecSinkP parallelParams
                       (kmeansFile params)
                       (numGaussian params)
-                      10000
-                      sh-- runResourceT
+                      1000
+                      sh-- runResourceT $
                         --   (pvpFileSource (P.head $ pvpFile params) $$
                         --    -- poolArrayConduit
                         --    --   (ParallelParams (Parser.numThread params) (Parser.batchSize params))

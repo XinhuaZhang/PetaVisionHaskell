@@ -89,6 +89,10 @@ options =
           ["KMeansFile"]
           (ReqArg KMeansFile "FILE")
           "Tree data file."
+  ,Option ['m']
+          ["modelName"]
+          (ReqArg ModelName "STRING")
+          "SVM model name"
   ,Option ['h']
           ["threshold"]
           (ReqArg (\x -> Threshold $ readDouble x) "DOUBLE")
