@@ -133,3 +133,14 @@ weightedSum weightPatches a = foldS (+) 0 arr
                     (\sh _ -> sh)
                     (\fwp fa sh@(Z :. _j :. _i :. _k :. n) ->
                        (fwp sh) * (fa (Z :. n)))
+
+
+weightVisualization :: FilePath -> PVPWeight -> IO ()
+weightVisualization filePath weight =
+  do let Z :. nyp' :. nxp' :. nfp' :. numPatches' = extent weight
+     M.sequence_
+       [plotWeightPatch (filePath P.++ show np P.++ "_" P.++ show nf P.++ ".png") .
+        computeS . extend (Z :. All :. All :. (1 :: Int)) . R.slice weight $
+        (Z :. All :. All :. nf :. np)
+       |np <- [0 .. numPatches' - 1]
+       ,nf <- [0 .. nfp' - 1]]
