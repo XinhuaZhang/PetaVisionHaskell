@@ -12,7 +12,7 @@ import           System.Environment
 import           Control.Monad.Trans.Resource
 
 main =
-  do (weightFile:folderName:_) <- getArgs
+  do (weightFile:folderName:dictName:_) <- getArgs
      weight <- runResourceT $ pvpFileSource weightFile $$ CL.head
      dir <- getCurrentDirectory
      removePathForcibly (dir P.++ "/Weight/" P.++ folderName)
@@ -25,8 +25,8 @@ main =
                 normalizedW =
                   normalizeWeight (P.fromIntegral (maxBound :: Pixel8))
                                   w
-            plotWeight (dir P.++ "/Weight/" P.++ folderName)
-                       w
+            -- plotWeight (dir P.++ "/Weight/" P.++ folderName)
+            --            w
             savePngImage
-              (dir P.++ "/Weight/" P.++ folderName P.++ "/dictionary.png")
+              (dir P.++ "/Weight/" P.++ folderName P.++ "/" P.++ dictName  P.++ ".png")
               (getGridImage normalizedW)

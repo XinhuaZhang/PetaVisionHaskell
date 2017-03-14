@@ -25,6 +25,6 @@ main =
                                   w
             weightVisualization (dir P.++ "/Weight/" P.++ folderName)
                                 w
-            savePngImage
-              (dir P.++ "/Weight/" P.++ folderName P.++ "/dictionary.png")
-              (getGridImage normalizedW)
+            -- savePngImage
+            --   (dir P.++ "/Weight/" P.++ folderName P.++ "/dictionary.png")
+            --   (getGridImage normalizedW)
