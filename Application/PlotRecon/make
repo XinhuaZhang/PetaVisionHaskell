@@ -4,6 +4,6 @@ FLAG="--make -O2 -rtsopts -j4 -threaded -funbox-strict-fields -XBangPatterns -fu
 LIBS="-lgomp -lstdc++ -lblas"
 OBJPATH="../../Classifier/LibLinear/"
 
-
 cabal exec -- ghc $FLAG $LIBS -i../../ Main.hs -o main
+cabal exec -- ghc $FLAG $LIBS -i../../ PlotReconConvolution.hs -o plotReconConvolution
 

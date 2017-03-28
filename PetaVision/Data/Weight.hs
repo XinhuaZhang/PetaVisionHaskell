@@ -1,9 +1,13 @@
+{-# LANGUAGE BangPatterns #-}
 module PetaVision.Data.Weight where
 
 import           Codec.Picture
-import           Control.Monad   as M
-import           Data.Array.Repa as R
-import           Prelude         as P
+import           Control.Monad               as M
+import           Data.Array.Repa             as R
+import qualified Data.Array.Unboxed          as AU
+import           Data.List                   as L
+import           PetaVision.Data.Convolution
+import           Prelude                     as P
 
 -- the layout of the weigth array is nyp x nxp x nfp x numPatches
 type PVPWeight = Array U DIM4 Double
@@ -86,7 +90,7 @@ plotWeight filePath weight =
                        w)
        [0 .. (numPatches' - 1)]
        weightPatches
-       
+
 plotWeightPatch :: FilePath -> PVPWeightPatch -> IO ()
 plotWeightPatch filePath weightPatch =
   do let Z :. nyp' :. nxp' :. nfp' = extent weightPatch
@@ -121,7 +125,7 @@ plotWeightPatch filePath weightPatch =
                     in PixelRGB8 r g b)
                  nyp'
                  nxp'
-     savePngImage filePath w 
+     savePngImage filePath w
 
 
 weightedSum
@@ -144,3 +148,53 @@ weightVisualization filePath weight =
         (Z :. All :. All :. nf :. np)
        |np <- [0 .. numPatches' - 1]
        ,nf <- [0 .. nfp' - 1]]
+
+
+weightListReconstruction
+  :: [PVPWeight] -> [Int] -> PVPWeight
+weightListReconstruction [] _ =
+  error "weightListReconstruction: empty weight list."
+weightListReconstruction (x:[]) _ =
+  normalizeWeight (fromIntegral (maxBound :: Pixel8))
+                  x
+weightListReconstruction (x:y:_) [] =
+  error "weightListReconstruction: empty stride list."
+weightListReconstruction (x:y:xs) (s:ss) =
+  weightListReconstruction (newWeight : xs)
+                           ss
+  where !newWeight = weightReconstruction x y s 
+
+{-# INLINE weightReconstruction #-}
+
+weightReconstruction
+  :: PVPWeight -> PVPWeight -> Int -> PVPWeight
+weightReconstruction act weight stride =
+  computeS .
+  L.foldl1' R.append .
+  L.map (R.extend (Z :. All :. All :. All :. (1 :: Int)) .
+         sumS .
+         L.foldl1' R.append .
+         L.map (R.extend (Z :. All :. All :. All :. (1 :: Int))) .
+         L.zipWith (\weight' y ->
+                      let weightArr =
+                            AU.listArray ((0,0,0),(wNy - 1,wNx - 1,wNf - 1)) .
+                            R.toList $
+                            weight' :: AU.UArray (Int,Int,Int) Double
+                          actArr = repaArray2UArray2 y
+                      in uArray2RepaArray3 $
+                         crossCorrelation25D stride actArr weightArr)
+                   weightList) $
+  ys
+  where (Z :. actNy :. actNx :. actNf :. actNumDict) = extent act
+        (Z :. wNy :. wNx :. wNf :. wNumDict) = extent weight
+        xs =
+          L.map (\i -> R.slice act (Z :. All :. All :. All :. (i :: Int)))
+                [0 .. actNumDict - 1]
+        ys =
+          L.map (\arr' ->
+                   L.map (\i -> R.slice arr' (Z :. All :. All :. i))
+                         [0 .. actNf - 1])
+                xs
+        weightList =
+          L.map (\i -> R.slice weight (Z :. All :. All :. All :. i))
+                [0 .. wNumDict - 1]
