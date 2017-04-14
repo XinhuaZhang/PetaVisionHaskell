@@ -3,3 +3,4 @@
 FLAG="--make -O2 -rtsopts -j4 -threaded -funbox-strict-fields -fno-liberate-case -funfolding-use-threshold1000 -funfolding-keeness-factor1000 -fllvm -optlo-O3" #-funbox-strict-fields
 
 cabal exec -- ghc $FLAG $LIBS -i../../ Main.hs -o main
+cabal exec -- ghc $FLAG $LIBS -i../../ MainAvgError.hs -o mainAvgError

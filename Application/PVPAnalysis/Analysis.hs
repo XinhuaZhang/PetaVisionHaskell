@@ -12,6 +12,7 @@ import           PetaVision.PVPFile.IO
 import           Prelude                      as P
 import           Text.Printf
 
+
 sparsity :: PVPHeader -> Sink PVPOutputData (ResourceT IO) ()
 sparsity header =
   do numActive <-
@@ -93,4 +94,16 @@ computeActivationHistogram _ x =
   error $ "computeActivationHistogram: " L.++ show x L.++ " is not supported."
 
 
-
+averageError :: PVPHeader -> Sink PVPOutputData (ResourceT IO) ()
+averageError header = do
+  errorSum <-
+    CL.fold
+      (\b a ->
+          case a of
+            PVP_OUTPUT_NONSPIKING_ACT _ x ->
+              b + sqrt (VU.sum . VU.map (^ (2 :: Int)) $ x)
+            _ -> error "sparsity: pvpFile type is not supported.")
+      0
+  let numEle = nx header * ny header * nf header
+      avgError = errorSum / fromIntegral numEle / fromIntegral (nBands header)
+  liftIO . print $ avgError
