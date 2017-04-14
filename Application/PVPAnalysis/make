@@ -3,3 +3,4 @@
 FLAG="--make -O2 -rtsopts -j4 -threaded " #-funbox-strict-fields
 
 ghc $FLAG $LIBS -i../../ Main.hs -o main
+ghc $FLAG $LIBS -i../../ MainAvgError.hs -o mainAvgError
