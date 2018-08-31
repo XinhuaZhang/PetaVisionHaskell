@@ -6,7 +6,6 @@ TAGS
 *.o
 *.txt
 /Application/PVP2LibLinear/model
-/Application/PVP2LibLinear/run
 /Application/PVP2LibLinear/test
 /Application/PVP2LibLinear/train
 *.pvp
@@ -14,8 +13,6 @@ Application/PVPAnalysis/main
 *.out
 *.dat
 /Application/GMM/plotWeight
-/Application/GMM/run
-/Application/GMM/runPlot
 /Application/GMM/trainGMM
 Application/GMM/Weight
 /Application/GMM/PlotWeight.hs
@@ -44,3 +41,6 @@ predict
 model*
 *.bak
 octave-workspace
+*.tgz
+make*
+Application/Amoeba/test
