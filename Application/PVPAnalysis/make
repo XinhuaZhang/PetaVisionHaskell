@@ -1,6 +1,17 @@
 #!/bin/bash
 
-FLAG="--make -O2 -rtsopts -j4 -threaded -funbox-strict-fields -fno-liberate-case -funfolding-use-threshold1000 -funfolding-keeness-factor1000 -fllvm -optlo-O3" #-funbox-strict-fields
+FLAG="--make -O2 -rtsopts -j4 -threaded -funbox-strict-fields -fno-liberate-case -funfolding-use-threshold1000 -funfolding-keeness-factor1000 -fllvm -optlo-O3 -XBangPatterns " #-funbox-strict-fields -fllvm -optlo-O3
+OBJPATH="../../Classifier/LibLinear/"
+LIBS="-lgomp -lstdc++ -lblas"
 
 cabal exec -- ghc $FLAG $LIBS -i../../ Main.hs -o main
-cabal exec -- ghc $FLAG $LIBS -i../../ MainAvgError.hs -o mainAvgError
+# cabal exec -- ghc $FLAG $LIBS -i../../ MainAvgError.hs -o mainAvgError
+cabal exec -- ghc $FLAG $LIBS -i../../ PlotEnergy.hs -o plotEnergy
+cabal exec -- ghc $FLAG $LIBS -i../../ PlotL1Norm.hs -o plotL1Norm
+cabal exec -- ghc $FLAG $LIBS -i../../ PlotEnergyTrend.hs -o plotEnergyTrend
+cabal exec -- ghc $FLAG $LIBS -i../../ PlotEnergyTrendLine.hs -o plotEnergyTrendLine
+cabal exec -- ghc $FLAG $LIBS -i../../ PlotChangeOfWeight.hs -o plotChangeOfWeight
+cabal exec -- ghc $FLAG $LIBS -i../../ CompareActivityDifference.hs -o compareActivityDifference
+cabal exec -- ghc $FLAG $LIBS -i../../ $OBJPATH/linear.o $OBJPATH/tron.o FeatureLabelHistogram.hs -o featureLabelHistogram
+cabal exec -- ghc $FLAG $LIBS -i../../ GroupNormAnalysis.hs -o groupNormAnalysis
+cabal exec -- ghc $FLAG $LIBS -i../../ PlotActivationMap.hs -o plotActivationMap

@@ -53,5 +53,5 @@ main =
                                     normalizedArr)
                                fileNames
                                normalizedArrs
-                   plotWeightPatch (dir P.++ "/Recon/recon.png")
-                                   combinedArr
+                   -- plotWeightPatch (dir P.++ "/Recon/recon.png")
+                   --                 combinedArr

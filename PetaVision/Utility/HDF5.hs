@@ -22,11 +22,12 @@ import           PetaVision.Utility.Parallel
 import           System.Directory
 import           System.FilePath
 import           System.IO
+import           Text.Printf
 
 hdf5Sink
   :: ParallelParams
   -> String
-  -> Sink (Double, [R.Array U DIM3 Double]) (ResourceT IO) ()
+  -> ConduitT (Double, [R.Array U DIM3 Double]) Void (ResourceT IO) ()
 hdf5Sink parallelParams folderName = do
   x <- CL.peek
   case x of
@@ -102,7 +103,7 @@ hdf5Source
   :: FilePath
   -> String
   -> String
-  -> C.Source (ResourceT IO) (Double, R.Array U DIM3 Double)
+  -> ConduitT () (Double, R.Array U DIM3 Double) (ResourceT IO) ()
 hdf5Source filePath labelName dataName = do
   h <- liftIO $ openFile filePath ReadMode
   labelStr <- liftIO $ newCString labelName
@@ -156,7 +157,7 @@ hdf5Source filePath labelName dataName = do
                  in L.map
                       (\i ->
                          computeS . R.slice arr $ (Z :. i :. All :. All :. All))
-                      [0 .. (L.last dims) - 1]) .
+                      [0 .. (L.head dims) - 1]) .
             allocaArray (L.product dims) $ \arrP -> do
               status <- c'H5LTread_dataset_float hid dataStr arrP
               when (status < 0) (error "c'H5LTread_dataset_float")
@@ -165,6 +166,102 @@ hdf5Source filePath labelName dataName = do
           when (status < 0) (error "c'H5Fclose")
           sourceList . L.map ((,) (float2Double . (\(CFloat x) -> x) $ label)) $
             arrs
+          loop h labelStr dataStr
+
+
+hdf5Source1
+  :: FilePath
+  -> String
+  -> String
+  -> ConduitT () (R.Array U DIM3 Double, R.Array U DIM3 Double) (ResourceT IO) ()
+hdf5Source1 filePath labelName dataName = do
+  h <- liftIO $ openFile filePath ReadMode
+  labelStr <- liftIO $ newCString labelName
+  dataStr <- liftIO $ newCString dataName
+  loop h labelStr dataStr
+  where
+    loop h labelStr dataStr = do
+      flag <- liftIO $ hIsEOF h
+      if flag
+        then liftIO $ hClose h
+        else do
+          path <- liftIO $ hGetLine h
+          hid <-
+            liftIO $
+            withCString path $ \cPath ->
+              c'H5Fopen cPath h5f_acc_rdonly h5p_default
+          when (hid < 0) (error "c'H5Fopen")
+          labelNdims <-
+            liftIO $
+            fmap fromIntegral . alloca $ \p -> do
+              status <- c'H5LTget_dataset_ndims hid labelStr p
+              when (status < 0) (error "c'H5LTget_dataset_ndims")
+              FS.peek p
+          when
+            (labelNdims /= 4)
+            (error "hdf5Source: hdf5 file is not a 4-dimension array.")
+          labelDims <-
+            liftIO $
+            fmap (L.map fromIntegral) . alloca $ \classP ->
+              alloca $ \typeSizeP ->
+                allocaArray labelNdims $ \arrP -> do
+                  status <-
+                    c'H5LTget_dataset_info hid labelStr arrP classP typeSizeP
+                  when (status < 0) (error "c'H5LTget_dataset_info")
+                  peekArray labelNdims arrP
+          labelArrs <-
+            liftIO $
+            fmap
+              (\xs ->
+                 let arr =
+                       fromListUnboxed (shapeOfList . L.reverse $ labelDims) .
+                       L.map (float2Double . (\(CFloat x) -> x)) $
+                       xs
+                 in L.map
+                      (\i ->
+                         computeS . R.slice arr $ (Z :. i :. All :. All :. All))
+                      [0 .. (L.head labelDims) - 1]) .
+            allocaArray (L.product labelDims) $ \arrP -> do
+              status <- c'H5LTread_dataset_float hid labelStr arrP
+              when (status < 0) (error "c'H5LTread_dataset_float")
+              peekArray (L.product labelDims) arrP
+          ndims <-
+            liftIO $
+            fmap fromIntegral . alloca $ \p -> do
+              status <- c'H5LTget_dataset_ndims hid dataStr p
+              when (status < 0) (error "c'H5LTget_dataset_ndims")
+              FS.peek p
+          when
+            (ndims /= 4)
+            (error "hdf5Source: hdf5 file is not a 4-dimension array.")
+          dims <-
+            liftIO $
+            fmap (L.map fromIntegral) . alloca $ \classP ->
+              alloca $ \typeSizeP ->
+                allocaArray ndims $ \arrP -> do
+                  status <-
+                    c'H5LTget_dataset_info hid dataStr arrP classP typeSizeP
+                  when (status < 0) (error "c'H5LTget_dataset_info")
+                  peekArray ndims arrP
+          arrs <-
+            liftIO $
+            fmap
+              (\xs ->
+                 let arr =
+                       fromListUnboxed (shapeOfList . L.reverse $ dims) .
+                       L.map (float2Double . (\(CFloat x) -> x)) $
+                       xs
+                 in L.map
+                      (\i ->
+                         computeS . R.slice arr $ (Z :. i :. All :. All :. All))
+                      [0 .. (L.head dims) - 1]) .
+            allocaArray (L.product dims) $ \arrP -> do
+              status <- c'H5LTread_dataset_float hid dataStr arrP
+              when (status < 0) (error "c'H5LTread_dataset_float")
+              peekArray (L.product dims) arrP
+          status <- liftIO $ c'H5Fclose hid
+          when (status < 0) (error "c'H5Fclose")
+          sourceList $ L.zip labelArrs arrs
           loop h labelStr dataStr
 
 

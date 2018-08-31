@@ -14,4 +14,5 @@ main = do
   sa <-
     runResourceT $
     pvpFileSource filePath $$ sparsityActivationHistogramSink header
+  print name
   plotSparsityNHistogram (name ++ "ActivationHistogram.png") sa

@@ -18,21 +18,23 @@ data Flag
   | PoolingType String
   | BatchSize Int
   | PoolingSize Int
+  | TimeStampFile FilePath
   deriving (Show)
 
 data Params = Params
-  { pvpFile     :: [[String]]  -- The inner-list is the same pvpFile
+  { pvpFile       :: [[String]] -- The inner-list is the same pvpFile
                                -- from different batches; the
                                -- outter-list is different pvpFile
-  , labelFile   :: [String]    -- A list of label files from different batches
-  , c           :: Double
-  , numThread   :: Int
-  , modelName   :: String
-  , findC       :: Bool
-  , poolingFlag :: Bool
-  , poolingType :: PoolingType
-  , batchSize   :: Int
-  , poolingSize :: Int
+  , labelFile     :: [String] -- A list of label files from different batches
+  , c             :: Double
+  , numThread     :: Int
+  , modelName     :: String
+  , findC         :: Bool
+  , poolingFlag   :: Bool
+  , poolingType   :: PoolingType
+  , batchSize     :: Int
+  , poolingSize   :: Int
+  , timeStampFile :: FilePath
   } deriving (Show)
 
 options :: [OptDescr Flag]
@@ -75,6 +77,7 @@ options =
       (ReqArg (PoolingSize . readInt) "INT")
       "Set pooling size (Defaule 3)."
   , Option ['m'] ["modelName"] (ReqArg ModelName "FILE") "SVM model name"
+  , Option ['z'] ["timeStampFile"] (ReqArg TimeStampFile "FILE") "Time stamps file path."
   ]
 
 readInt :: String -> Int
@@ -113,70 +116,24 @@ parseFlag flags = go flags defaultFlag
       , poolingType = Avg
       , batchSize = 1
       , poolingSize = 3
+      , timeStampFile = ""
       }
     go [] params = params
     go (x:xs) params =
       case x of
         PVPFile str ->
-          go
-            xs
-            (params
-             { pvpFile = splitStringbySpace str : pvpFile params
-             })
-        LabelFile str ->
-          go
-            xs
-            (params
-             { labelFile = splitStringbySpace str 
-             })
-        Thread n ->
-          go
-            xs
-            (params
-             { numThread = n
-             })
-        C v ->
-          go
-            xs
-            (params
-             { c = v
-             })
-        ModelName str ->
-          go
-            xs
-            (params
-             { modelName = str
-             })
-        FindC ->
-          go
-            xs
-            (params
-             { findC = True
-             })
-        Pool ->
-          go
-            xs
-            (params
-             { poolingFlag = True
-             })
+          go xs (params {pvpFile = splitStringbySpace str : pvpFile params})
+        LabelFile str -> go xs (params {labelFile = splitStringbySpace str})
+        Thread n -> go xs (params {numThread = n})
+        C v -> go xs (params {c = v})
+        ModelName str -> go xs (params {modelName = str})
+        FindC -> go xs (params {findC = True})
+        Pool -> go xs (params {poolingFlag = True})
         PoolingType str ->
-          go
-            xs
-            (params
-             { poolingType = read str :: PoolingType
-             })
-        BatchSize x' ->
-          go
-            xs
-            (params
-             { batchSize = x'
-             })
-        PoolingSize n ->
-          go
-            xs
-            (params
-             { poolingSize = n
-             })
+          go xs (params {poolingType = read str :: PoolingType})
+        BatchSize x' -> go xs (params {batchSize = x'})
+        PoolingSize n -> go xs (params {poolingSize = n})
+        TimeStampFile str -> go xs (params {timeStampFile = str})
 
 parseArgs :: [String] -> IO Params
 parseArgs args = do

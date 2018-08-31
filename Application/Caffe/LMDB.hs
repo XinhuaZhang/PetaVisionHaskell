@@ -89,7 +89,7 @@ saveData batchSize n = do
 
 saveFloatData :: Int
               -> Int
-              -> Sink (Int, [R.Array U DIM3 Double]) (ResourceT IO) ()
+              -> ConduitT (Double, [R.Array U DIM3 Double]) Void (ResourceT IO) ()
 saveFloatData batchSize n = do
   batchList <- CL.take batchSize
   if L.null batchList
@@ -100,8 +100,8 @@ saveFloatData batchSize n = do
         M.zipWithM_
           (\i batch ->
              let (Z :. channels :. rows :. cols) = extent . L.head $ batch
-             in do labelVec <- createLabelVec labels
-                   featuresVec <- createFloatDataArr . L.map R.toList $ batch
+             in do labelVec <- createLabelVec . L.map round $ labels
+                   featuresVec <- createFloatDataArr . L.map ( R.toList) $ batch
                    withArray
                      featuresVec
                      (\featureIndexVec ->
@@ -127,24 +127,37 @@ saveDataSink path batchSize = do
   case x of
     Nothing -> return ()
     Just y -> do
+      let numLayer = L.length y
+      liftIO $ createDirectoryIfMissing True path
+      liftIO $
+        M.mapM_
+          (\i -> do
+             let p = path L.++ "_" L.++ show i
+             removePathForcibly p)
+          [0 .. numLayer - 1]
       pathCSString <- liftIO $ newCString path
       typeCSString <- liftIO $ newCString "lmdb"
       liftIO $
         c'openDatabase typeCSString pathCSString (fromIntegral . L.length $ y)
       saveData batchSize 0
 
-saveFloatDataSink :: String
-                  -> Int
-                  -> Sink (Int, [R.Array U DIM3 Double]) (ResourceT IO) ()
+saveFloatDataSink
+  :: String
+  -> Int
+  -> ConduitT (Double, [R.Array U DIM3 Double]) Void (ResourceT IO) ()
 saveFloatDataSink path batchSize = do
   x <- CL.peek
   case x of
     Nothing -> return ()
     Just y -> do
       let numLayer = L.length . snd $ y
+      liftIO . M.mapM_ (print . extent) . snd $ y
+      liftIO $ createDirectoryIfMissing True path
       liftIO $
         M.mapM_
-          (\i -> removePathForcibly (path L.++ "_" L.++ show i))
+          (\i -> do
+             let p = path L.++ "_" L.++ show i
+             removePathForcibly p)
           [0 .. numLayer - 1]
       pathCSString <- liftIO $ newCString path
       typeCSString <- liftIO $ newCString "lmdb"
@@ -161,3 +174,4 @@ normalize (lb, ub) xs
   where
     minV = L.minimum xs
     maxV = L.maximum xs
+

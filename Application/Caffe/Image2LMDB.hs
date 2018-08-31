@@ -1,4 +1,5 @@
 import           Application.Caffe.ArgsParser as AP
+import           Application.Caffe.Conduit
 import           Application.Caffe.LMDB
 import           Control.Monad                as M
 import           Control.Monad.Trans.Resource
@@ -47,12 +48,18 @@ main = do
       (trainPathList, validatePathList) = L.splitAt len pathList
       (trainLabelList, validateLabelList) = L.splitAt len labelList
   runResourceT $
-    sourceList trainPathList $$ readImageConduit True =$= CL.map imageContent =$=
+    sourceList trainPathList $$ readImageConduit True =$=
+    CL.map (\x -> [imageContent x]) =$=
+    padConduit parallelParams 4 =$=
+    CL.map (\(x:_) -> x) =$=
     mergeSource (sourceList trainLabelList) =$=
     CL.map (\x -> [x]) =$=
     saveDataSink ("Train_" L.++ folderName params) (PA.batchSize parallelParams)
   runResourceT $
-    sourceList validatePathList $$ readImageConduit True =$= CL.map imageContent =$=
+    sourceList validatePathList $$ readImageConduit True =$=
+    CL.map (\x -> [imageContent x]) =$=
+    padConduit parallelParams 4 =$=
+    CL.map (\(x:_) -> x) =$=
     mergeSource (sourceList validateLabelList) =$=
     CL.map (\x -> [x]) =$=
     saveDataSink

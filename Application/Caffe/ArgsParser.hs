@@ -22,10 +22,11 @@ data Flag
   | TimeStampFile FilePath
   | ConcatFlag
   | FolderName String
+  | PadLength Int
   deriving (Show)
 
 data Params = Params
-  { pvpFile       :: [String]
+  { pvpFile       :: [[String]] -- The inner-list is pvpFiles with the same stride
   , labelFile     :: String
   , c             :: Double
   , numThread     :: Int
@@ -38,6 +39,7 @@ data Params = Params
   , timeStampFile :: FilePath
   , concatFlag    :: Bool
   , folderName    :: String
+  , padLength     :: Int
   } deriving (Show)
 
 options :: [OptDescr Flag]
@@ -99,6 +101,11 @@ options =
        ["FolderName"]
        (ReqArg FolderName "String")
        "Folder name for storing HDF5 files."
+  ,   Option
+        ['z']
+        ["PadLength"]
+        (ReqArg (PadLength . readInt) "INT")
+        "Set the length of padding area."
   ]
 
 readInt :: String -> Int
@@ -140,11 +147,13 @@ parseFlag flags = go flags defaultFlag
       , timeStampFile = ""
       , concatFlag = False
       , folderName = ""
+      , padLength = 0
       }
     go [] params = params
     go (x:xs) params =
       case x of
-        PVPFile str -> go xs (params {pvpFile = str : pvpFile params})
+        PVPFile str ->
+          go xs (params {pvpFile = splitStringbySpace str : pvpFile params})
         LabelFile str -> go xs (params {labelFile = str})
         Thread n -> go xs (params {numThread = n})
         C v -> go xs (params {c = v})
@@ -158,6 +167,7 @@ parseFlag flags = go flags defaultFlag
         TimeStampFile str -> go xs (params {timeStampFile = str})
         ConcatFlag -> go xs (params {concatFlag = True})
         FolderName str -> go xs (params {folderName = str})
+        PadLength x' -> go xs (params {padLength = x'})
 
 parseArgs :: [String] -> IO Params
 parseArgs args = do

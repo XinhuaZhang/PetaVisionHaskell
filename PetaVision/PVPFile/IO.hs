@@ -1,5 +1,6 @@
 module PetaVision.PVPFile.IO
-  ( PVPHeader(..)
+  ( module PetaVision.PVPFile.Types
+  , PVPHeader(..)
   , PVPWeightHeader(..)
   , PVPOutputData(..)
   , PVPDimension(..)
@@ -214,7 +215,13 @@ getFrame header h =
         incrementalGetPVPFrameData header bs'
     PVP_KERNEL_FILE -> do
       _frameHeader <- getPVPHeader h
-      bs' <- BL.hGet h (recordSize header)
+      let rs =
+            (numPatches . weightHeader $ header) *
+            ((nxp . weightHeader $ header) * (nyp . weightHeader $ header) *
+             (nfp . weightHeader $ header) *
+             (dataSize header) +
+             8)
+      bs' <- BL.hGet h rs -- (recordSize header)
       let xs =
             P.concat . L.transpose . P.map (\(FRAME_KERNEL x) -> x) $
             incrementalGetPVPFrameData header bs'
@@ -231,8 +238,9 @@ getFrame header h =
                   return (time', fromIntegral num))
               bs
       if numActive == 0
-        then return
-               (PVP_OUTPUT_ACT_SPARSEVALUES (getPVPDimension header) VU.empty)
+        then do
+          putStrLn "All zeros activities."
+          return (PVP_OUTPUT_ACT_SPARSEVALUES (getPVPDimension header) VU.empty)
         else do
           bs' <- getByteStringData h (numActive * 2) (getPVPDataType header)
           return .

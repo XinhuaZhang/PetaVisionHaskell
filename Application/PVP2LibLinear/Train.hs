@@ -33,13 +33,14 @@ main =
          nbands = P.sum . P.map nBands $ batchHeader
          dims = dimOffset header
          trainParams =
-           TrainParams {trainSolver = L2R_L2LOSS_SVC_DUAL
+           TrainParams {trainSolver = L2R_L2LOSS_SVC_DUAL -- L2R_L2LOSS_SVC_DUAL -- L2R_LR
+
                        ,trainC = (c params)
                        ,trainNumExamples = nbands
                        ,trainFeatureIndexMax =
                           (\((nf,ny,nx),n) -> n + nf * ny * nx) . P.last $ dims
                        ,trainModel = (modelName params)}
-     print trainParams
+     -- print trainParams
      if poolingFlag params
         then do putStrLn $
                   "Using CPU for " ++ show (poolingType params) ++ " Pooling"

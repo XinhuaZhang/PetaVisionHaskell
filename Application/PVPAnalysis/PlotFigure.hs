@@ -40,3 +40,52 @@ plotSparsityNHistogram filePath (percent,vec) =
              $ plot_bars_item_styles .~ L.map mkStyle (cycle defaultColorSeq)
              $ def
         mkStyle c = (solidFillStyle c, Just (solidLine 1.0 $ opaque black))
+
+
+plotHistogram :: FilePath -> VU.Vector Double -> IO (PickFn ())
+plotHistogram filePath vec = renderableToFile def filePath $ toRenderable layout
+  where
+    nf' = VU.length vec
+    xs = L.zipWith (\i v -> (i, [v])) [1 ..] . VU.toList $ vec
+    title = ""
+    layout =
+      layout_title .~ title $ layout_title_style . font_size .~ 20 $
+      layout_left_axis_visibility .
+      axis_show_ticks .~
+      False $
+      layout_plots .~
+      [plotBars bars] $
+      def :: Layout PlotIndex Double
+    bars =
+      plot_bars_titles .~ [""] $ plot_bars_values .~ xs $ plot_bars_style .~
+      BarsClustered $
+      plot_bars_spacing .~
+      BarsFixGap 0 5 $
+      plot_bars_item_styles .~
+      L.map mkStyle (cycle defaultColorSeq) $
+      def
+    mkStyle c = (solidFillStyle c, Just (solidLine 1.0 $ opaque black))
+
+
+plotActivation :: FilePath -> String  -> VU.Vector Double -> IO (PickFn ())
+plotActivation filePath title vec =
+  renderableToFile def filePath $ toRenderable layout
+  where
+    nf' = VU.length vec
+    xs = [L.zipWith (\i v -> (i, v)) [1 :: Double ..] . VU.toList $ vec]
+    layout =
+      layout_title .~ title $ layout_title_style . font_size .~ 20 $
+      layout_left_axis_visibility .
+      axis_show_ticks .~
+      False $
+      layout_plots .~
+      [toPlot lines] $
+      def :: Layout Double Double
+    lines =
+      plot_lines_title .~ "" $ plot_lines_style .~ defaultPlotLineStyle $
+      plot_lines_values .~
+      xs $
+      plot_lines_limit_values .~
+        -- (LMin, LValue . VU.minimum $ vec), (LMax, LValue . VU.maximum $ vec)
+      [[]] $
+      def :: PlotLines Double Double

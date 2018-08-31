@@ -3,10 +3,13 @@ module PetaVision.Data.Weight where
 
 import           Codec.Picture
 import           Control.Monad               as M
+import qualified Data.Array                  as AU
 import           Data.Array.Repa             as R
-import qualified Data.Array.Unboxed          as AU
 import           Data.List                   as L
+import           Data.Vector.Unboxed         as VU
 import           PetaVision.Data.Convolution
+import           PetaVision.Utility.Parallel
+import           PetaVision.Utility.Time
 import           Prelude                     as P
 
 -- the layout of the weigth array is nyp x nxp x nfp x numPatches
@@ -34,9 +37,9 @@ normalizeWeight upperBound weight =
                upperBound)
   where (Z :. nyp' :. nxp' :. nfp' :. numPatches') = extent weight
         permutedW =
-          backpermute (Z :. numPatches' :. nyp' :. nxp' :. nfp')
-                      (\(Z :. np :. j :. i :. k) -> Z :. j :. i :. k :. np)
-                      weight
+          R.backpermute (Z :. numPatches' :. nyp' :. nxp' :. nfp')
+                        (\(Z :. np :. j :. i :. k) -> Z :. j :. i :. k :. np)
+                        weight
         bound = 1000000
         maxArr =
           foldS max (-bound) . foldS max (-bound) . foldS max (-bound) $
@@ -59,13 +62,13 @@ plotWeight filePath weight =
                           (\i j ->
                              let r =
                                    fromIntegral . round $
-                                   normalizedW ! (Z :. j :. i :. 0 :. n)
+                                   normalizedW R.! (Z :. j :. i :. 0 :. n)
                                  g =
                                    fromIntegral . round $
-                                   normalizedW ! (Z :. j :. i :. 1 :. n)
+                                   normalizedW R.! (Z :. j :. i :. 1 :. n)
                                  b =
                                    fromIntegral . round $
-                                   normalizedW ! (Z :. j :. i :. 2 :. n)
+                                   normalizedW R.! (Z :. j :. i :. 2 :. n)
                              in PixelRGB8 r g b)
                           nyp'
                           nxp')
@@ -77,7 +80,7 @@ plotWeight filePath weight =
                           (\i j ->
                              let v =
                                    fromIntegral . round $
-                                   normalizedW ! (Z :. j :. i :. 0 :. n)
+                                   normalizedW R.! (Z :. j :. i :. 0 :. n)
                              in v)
                           nyp'
                           nxp')
@@ -105,7 +108,7 @@ plotWeightPatch filePath weightPatch =
                  (\i j ->
                     let v =
                           fromIntegral . round $
-                          normalizedWeightPatch ! (Z :. j :. i :. 0)
+                          normalizedWeightPatch R.! (Z :. j :. i :. 0)
                     in v)
                  nyp'
                  nxp'
@@ -115,16 +118,17 @@ plotWeightPatch filePath weightPatch =
                  (\i j ->
                     let r =
                           fromIntegral . round $
-                          normalizedWeightPatch ! (Z :. j :. i :. 0)
+                          normalizedWeightPatch R.! (Z :. j :. i :. 0)
                         g =
                           fromIntegral . round $
-                          normalizedWeightPatch ! (Z :. j :. i :. 1)
+                          normalizedWeightPatch R.! (Z :. j :. i :. 1)
                         b =
                           fromIntegral . round $
-                          normalizedWeightPatch ! (Z :. j :. i :. 2)
+                          normalizedWeightPatch R.! (Z :. j :. i :. 2)
                     in PixelRGB8 r g b)
                  nyp'
                  nxp'
+             x -> error $ "plotWeightPatch: Image channel error: " L.++ show (extent weightPatch)
      savePngImage filePath w
 
 
@@ -150,51 +154,97 @@ weightVisualization filePath weight =
        ,nf <- [0 .. nfp' - 1]]
 
 
-weightListReconstruction
-  :: [PVPWeight] -> [Int] -> PVPWeight
-weightListReconstruction [] _ =
+weightListReconstruction :: ParallelParams -> [PVPWeight] -> [Int] -> PVPWeight
+weightListReconstruction _ [] _ =
   error "weightListReconstruction: empty weight list."
-weightListReconstruction (x:[]) _ =
-  normalizeWeight (fromIntegral (maxBound :: Pixel8))
-                  x
-weightListReconstruction (x:y:_) [] =
+weightListReconstruction _ ((!x):[]) _ =
+  normalizeWeight (fromIntegral (maxBound :: Pixel8)) x
+weightListReconstruction _ (x:y:_) [] =
   error "weightListReconstruction: empty stride list."
-weightListReconstruction (x:y:xs) (s:ss) =
-  weightListReconstruction (newWeight : xs)
-                           ss
-  where !newWeight = weightReconstruction x y s 
+weightListReconstruction parallelParams (!x:(!y):xs) (s:ss) =
+  weightListReconstruction parallelParams (newWeight : xs) ss
+  where
+    !newWeight = weightReconstruction parallelParams x y s
 
 {-# INLINE weightReconstruction #-}
 
 weightReconstruction
-  :: PVPWeight -> PVPWeight -> Int -> PVPWeight
-weightReconstruction act weight stride =
+  :: ParallelParams -> PVPWeight -> PVPWeight -> Int -> PVPWeight
+weightReconstruction parallelParams act weight stride =
   computeS .
   L.foldl1' R.append .
-  L.map (R.extend (Z :. All :. All :. All :. (1 :: Int)) .
-         sumS .
-         L.foldl1' R.append .
-         L.map (R.extend (Z :. All :. All :. All :. (1 :: Int))) .
-         L.zipWith (\weight' y ->
+  L.map (R.extend (Z :. All :. All :. All :. (1 :: Int))) .
+  parMap
+    rseq
+    (\z ->
+       let arr = sumS .
+                 L.foldl1' R.append .
+                 L.map
+                   (R.extend (Z :. All :. All :. All :. (1 :: Int)) . array2RepaArray3) .
+                 L.zipWith
+                   (\weight' y ->
                       let weightArr =
-                            AU.listArray ((0,0,0),(wNy - 1,wNx - 1,wNf - 1)) .
+                            AU.listArray ((0, 0, 0), (wNy - 1, wNx - 1, wNf - 1)) .
                             R.toList $
-                            weight' :: AU.UArray (Int,Int,Int) Double
-                          actArr = repaArray2UArray2 y
-                      in uArray2RepaArray3 $
-                         crossCorrelation25D stride actArr weightArr)
-                   weightList) $
+                            weight' :: AU.Array (Int, Int, Int) Double
+                          actArr = repaArray2Array2 y
+                      in crossCorrelation25D stride actArr weightArr)
+                   weightList $
+                 z
+       in deepSeqArray arr arr) $
   ys
-  where (Z :. actNy :. actNx :. actNf :. actNumDict) = extent act
-        (Z :. wNy :. wNx :. wNf :. wNumDict) = extent weight
-        xs =
-          L.map (\i -> R.slice act (Z :. All :. All :. All :. (i :: Int)))
-                [0 .. actNumDict - 1]
-        ys =
-          L.map (\arr' ->
-                   L.map (\i -> R.slice arr' (Z :. All :. All :. i))
-                         [0 .. actNf - 1])
-                xs
-        weightList =
-          L.map (\i -> R.slice weight (Z :. All :. All :. All :. i))
-                [0 .. wNumDict - 1]
+  where
+    (Z :. actNy :. actNx :. actNf :. actNumDict) = extent act
+    (Z :. wNy :. wNx :. wNf :. wNumDict) = extent weight
+    xs =
+      L.map
+        (\i -> R.slice act (Z :. All :. All :. All :. (i :: Int)))
+        [0 .. actNumDict - 1]
+    ys =
+      L.map
+        (\arr' ->
+           L.map (\i -> R.slice arr' (Z :. All :. All :. i)) [0 .. actNf - 1])
+        xs
+    weightList =
+      L.map
+        (\i -> R.slice weight (Z :. All :. All :. All :. i))
+        [0 .. wNumDict - 1]
+
+{-# INLINE reorderWeight #-}
+
+reorderWeight :: [Int] -> PVPWeight -> PVPWeight
+reorderWeight idx w =
+  computeS .
+  R.backpermute
+    (extent w)
+    (\(Z :. ny :. nx :. nf :. np) -> (Z :. ny :. nx :. nf :. vec VU.! np)) $
+  w
+  where
+    !vec = VU.fromList idx
+
+
+{-# INLINE weightReconstructionAct #-}
+
+weightReconstructionAct :: PVPWeightPatch -> PVPWeight -> Int -> PVPWeightPatch
+weightReconstructionAct act weight stride =
+  sumS .
+  L.foldl1' R.append .
+  L.map (R.extend (Z :. All :. All :. All :. (1 :: Int)) . array2RepaArray3) .
+  parZipWith
+    rdeepseq
+    (\weight' y ->
+       let weightArr =
+             AU.listArray ((0, 0, 0), (wNy - 1, wNx - 1, wNf - 1)) . R.toList $
+             weight' :: AU.Array (Int, Int, Int) Double
+           actArr = repaArray2Array2 y
+       in crossCorrelation25D stride actArr weightArr)
+    weightList .
+  L.map (\i -> R.slice act (Z :. All :. All :. i)) $
+  [0 .. actNf - 1]
+  where
+    (Z :. actNy :. actNx :. actNf) = extent act
+    (Z :. wNy :. wNx :. wNf :. wNumDict) = extent weight
+    weightList =
+      L.map
+        (\i -> R.slice weight (Z :. All :. All :. All :. i))
+        [0 .. wNumDict - 1]
