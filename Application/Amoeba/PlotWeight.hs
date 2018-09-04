@@ -19,7 +19,7 @@ main = do
   (weightFilePath:dictName:_) <- getArgs
   weight <-
     (\(PVP_OUTPUT_KERNEL x) -> x) . fromJust <$>
-    (runConduitRes $ pvpFileSource weightFilePath .| CL.head)
+    runConduitRes (pvpFileSource weightFilePath .| CL.head)
   let (Z :. _ :. _ :. nf :. _) = extent weight
   createDirectoryIfMissing True "Weight"
   M.mapM_
@@ -29,7 +29,7 @@ main = do
              computeS .
              extend (Z :. All :. All :. (1 :: Int) :. All) . R.slice weight $
              (Z :. All :. All :. i :. All)
-       in savePngImage
-            ("Weight/" L.++ dictName L.++ "_" L.++ show i L.++ ".png")
-            (getGridImage normalizedW))
+        in savePngImage
+             ("Weight/" L.++ dictName L.++ "_" L.++ show i L.++ ".png")
+             (getGridImage normalizedW))
     [0 .. nf - 1]

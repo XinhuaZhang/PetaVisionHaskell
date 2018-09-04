@@ -250,7 +250,7 @@ getFrame header h =
   where
     (PVPWeightHeader nxp' nyp' nfp' _ _ numPatches') = weightHeader header
 
-pvpFileSource :: FilePath -> C.Source (ResourceT IO) PVPOutputData
+pvpFileSource :: FilePath -> ConduitT () PVPOutputData (ResourceT IO) ()
 pvpFileSource filePath = do
   h <- liftIO $ openBinaryFile filePath ReadMode
   header <- liftIO $ getPVPHeader h
@@ -321,5 +321,5 @@ putPVPFrame (PVP_OUTPUT_NONSPIKING_ACT _ vec) = do
 putPVPFrame x =
   error $ "putPVPFrame: PVP data type " L.++ show x L.++ " is not supported."
 
-writePVPFileConduit :: Conduit PVPOutputData (ResourceT IO) BS.ByteString
+writePVPFileConduit :: ConduitT PVPOutputData BS.ByteString (ResourceT IO) ()
 writePVPFileConduit = awaitForever (CB.sourceLbs . runPut . putPVPFrame)

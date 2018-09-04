@@ -17,7 +17,7 @@ import           Text.Printf
 import Data.Bits
 
 
-sparsity :: PVPHeader -> Sink PVPOutputData (ResourceT IO) ()
+sparsity :: PVPHeader -> ConduitT PVPOutputData () (ResourceT IO) ()
 sparsity header =
   do numActive <-
        CL.fold (\b a ->
@@ -40,8 +40,9 @@ sparsity header =
               (nf header)
   where totalNumEle = (nBands header) * (nx header) * (ny header) * (nf header)
 
-sparsityActivationHistogramSink
-  :: PVPHeader -> Sink PVPOutputData (ResourceT IO) (Double,VU.Vector Double)
+sparsityActivationHistogramSink ::
+     PVPHeader
+  -> ConduitT PVPOutputData () (ResourceT IO) (Double, VU.Vector Double)
 sparsityActivationHistogramSink header =
   do (numActive,actCount) <-
        CL.fold (\(b,vec) a ->
@@ -128,7 +129,7 @@ getFeatureIndex (PVPDimension nx' ny' nf') i =
   in a
 
 
-averageError :: PVPHeader -> Sink PVPOutputData (ResourceT IO) ()
+averageError :: PVPHeader -> ConduitT PVPOutputData () (ResourceT IO) ()
 averageError header = do
   errorSum <-
     CL.fold
@@ -142,7 +143,7 @@ averageError header = do
       avgError = errorSum / fromIntegral numEle / fromIntegral (nBands header)
   liftIO . print $ avgError
 
-weightChangeConduit :: Conduit PVPOutputData (ResourceT IO) Double
+weightChangeConduit :: ConduitT PVPOutputData Double (ResourceT IO) ()
 weightChangeConduit = do
   x <- await
   when
